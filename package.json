@@ -1,0 +1,13 @@
+{
+  "name": "medicalrite-checkout-gate",
+  "private": true,
+  "scripts": {
+    "config:link": "shopify app config link",
+    "dev": "shopify app dev",
+    "deploy": "shopify app deploy",
+    "check": "cd extensions/probe-validation && cargo check && cd ../probe-payment && cargo check"
+  },
+  "devDependencies": {
+    "@shopify/cli": "^4.8.1"
+  }
+}

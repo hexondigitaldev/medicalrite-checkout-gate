@@ -1,0 +1,17 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "Bot Gate probe: payment"
+handle = "probe-payment"
+type = "function"
+description = "Phase A probe. Hides nothing unless configured; records payment methods."
+
+  [[extensions.targeting]]
+  target = "cart.payment-methods.transform.run"
+  input_query = "src/run.graphql"
+  export = "cart_payment_methods_transform_run"
+
+  [extensions.build]
+  command = "cargo build --target=wasm32-unknown-unknown --release"
+  path = "target/wasm32-unknown-unknown/release/probe-payment.wasm"
+  watch = ["src/**/*.rs"]

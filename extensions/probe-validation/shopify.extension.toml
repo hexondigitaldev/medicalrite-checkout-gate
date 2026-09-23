@@ -1,0 +1,17 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "Bot Gate probe: validation"
+handle = "probe-validation"
+type = "function"
+description = "Phase A probe. Never blocks; records checkout rule input."
+
+  [[extensions.targeting]]
+  target = "cart.validations.generate.run"
+  input_query = "src/run.graphql"
+  export = "cart_validations_generate_run"
+
+  [extensions.build]
+  command = "cargo build --target=wasm32-unknown-unknown --release"
+  path = "target/wasm32-unknown-unknown/release/probe-validation.wasm"
+  watch = ["src/**/*.rs"]

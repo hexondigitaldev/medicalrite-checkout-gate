@@ -1,0 +1,12 @@
+[package]
+name = "probe-payment"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+shopify_function = "2.1.0"
+
+[profile.release]
+lto = true
+opt-level = 'z'
+strip = true

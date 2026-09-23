@@ -1,0 +1,15 @@
+{% comment %}
+  Phase A probe app embed. Turn on in: Online Store > Themes > Customize > App embeds.
+  Sets a harmless cart attribute `_bg_probe` so we can see, in the function run logs,
+  which checkout flows (normal, Buy it now, PayPal express, permalink) keep theme-set
+  cart attributes (open question 3). Contains no secrets.
+{% endcomment %}
+<script src="{{ 'probe.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Bot Gate probe",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

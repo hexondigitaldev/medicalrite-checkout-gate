@@ -1,0 +1,13 @@
+# Run `npm run config:link` once to connect this repo to the app in your Partner
+# dashboard. The CLI fills in client_id and application_url.
+name = "MedicalRite Bot Gate"
+client_id = ""
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_payment_customizations,write_payment_customizations,read_validations,write_validations"
+
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true

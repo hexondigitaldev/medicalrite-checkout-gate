@@ -1,0 +1,33 @@
+# Phase A probe: record every payment method (name, id, placements) Shopify passes in.
+query Input {
+  paymentMethods {
+    id
+    name
+    placements
+  }
+  paymentCustomization {
+    metafield(namespace: "$app:bot-gate-probe", key: "config") {
+      jsonValue
+    }
+  }
+  cart {
+    bg: attribute(key: "_bg") {
+      value
+    }
+    probe: attribute(key: "_bg_probe") {
+      value
+    }
+    buyerIdentity {
+      email
+      isAuthenticated
+      customer {
+        numberOfOrders
+      }
+    }
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
+  }
+}

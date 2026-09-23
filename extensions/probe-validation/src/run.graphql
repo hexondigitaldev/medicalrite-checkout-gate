@@ -1,0 +1,77 @@
+# Phase A probe: ask for everything that could help answer Q2/Q3/Q4.
+# The function run log in the Partner dashboard shows this full input for every run.
+query Input {
+  buyerJourney {
+    step
+  }
+  cart {
+    bg: attribute(key: "_bg") {
+      key
+      value
+    }
+    probe: attribute(key: "_bg_probe") {
+      key
+      value
+    }
+    buyerIdentity {
+      email
+      isAuthenticated
+      purchasingCompany {
+        company {
+          id
+        }
+      }
+      customer {
+        id
+        numberOfOrders
+      }
+    }
+    cost {
+      subtotalAmount {
+        amount
+      }
+      totalAmount {
+        amount
+      }
+    }
+    lines {
+      id
+      quantity
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          sku
+        }
+      }
+    }
+    deliveryGroups {
+      id
+      deliveryAddress {
+        name
+        firstName
+        lastName
+        address1
+        address2
+        city
+        provinceCode
+        zip
+        countryCode
+      }
+      selectedDeliveryOption {
+        handle
+        title
+      }
+    }
+  }
+  shop {
+    localTime {
+      date
+    }
+  }
+}
