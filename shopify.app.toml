@@ -1,13 +1,38 @@
-# Run `npm run config:link` once to connect this repo to the app in your Partner
-# dashboard. The CLI fills in client_id and application_url.
-name = "MedicalRite Bot Gate"
-client_id = ""
-application_url = "https://example.com"
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "Medicalrite Bot Gate"
+client_id = "95ea1c81ef6561574915f99863674d71"
+application_url = "https://shopify.dev/apps/default-app-home"
 embedded = true
 
 [access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_payment_customizations,write_payment_customizations,read_validations,write_validations"
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
+
+[auth]
+redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+
+[webhooks]
+api_version = "2026-10"
+
+# Stage 1 settings, editable by store staff in Shopify admin > Content > Metaobjects.
+# The checkout rule reads the entry with handle "main". Only TWO fields on purpose:
+# Shopify caps a function's input query cost at 30 and each metaobject field costs 4.
+[metaobjects.app.bot_gate_settings]
+name = "Bot Gate settings"
+description = "Checkout blocklist. Create ONE entry with handle 'main'. Changes apply within minutes, no redeploy."
+access.admin = "merchant_read_write"
+
+[metaobjects.app.bot_gate_settings.fields.enabled]
+name = "Enabled"
+description = "Kill switch. Off = the checkout rule lets every checkout through."
+type = "boolean"
+required = true
+
+[metaobjects.app.bot_gate_settings.fields.config]
+name = "Rules (JSON)"
+description = "mode ('log_only' or 'enforce'), support_phone, skip_logged_in, blocked_names, blocked_address1, blocked_zips, blocked_email_domains. See docs/settings.md."
+type = "json"

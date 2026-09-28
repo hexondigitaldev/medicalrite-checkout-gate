@@ -1,5 +1,5 @@
-# Phase A probe: ask for everything that could help answer Q2/Q3/Q4.
-# The function run log in the Partner dashboard shows this full input for every run.
+# Phase A probe (live-safe version): no customer or product fields, so the app
+# needs no read_customers / read_products scope and run logs stay visible.
 query Input {
   buyerJourney {
     step
@@ -13,65 +13,13 @@ query Input {
       key
       value
     }
-    buyerIdentity {
-      email
-      isAuthenticated
-      purchasingCompany {
-        company {
-          id
-        }
-      }
-      customer {
-        id
-        numberOfOrders
-      }
-    }
     cost {
       subtotalAmount {
         amount
       }
-      totalAmount {
-        amount
-      }
     }
     lines {
-      id
       quantity
-      sellingPlanAllocation {
-        sellingPlan {
-          id
-        }
-      }
-      merchandise {
-        __typename
-        ... on ProductVariant {
-          id
-          sku
-        }
-      }
-    }
-    deliveryGroups {
-      id
-      deliveryAddress {
-        name
-        firstName
-        lastName
-        address1
-        address2
-        city
-        provinceCode
-        zip
-        countryCode
-      }
-      selectedDeliveryOption {
-        handle
-        title
-      }
-    }
-  }
-  shop {
-    localTime {
-      date
     }
   }
 }

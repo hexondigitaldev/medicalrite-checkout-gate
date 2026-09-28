@@ -1,0 +1,5 @@
+query {
+  paymentCustomizations(first: 20) {
+    nodes { id title enabled functionId }
+  }
+}

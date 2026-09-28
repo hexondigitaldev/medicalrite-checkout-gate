@@ -1,11 +1,10 @@
 api_version = "2026-07"
 
 [[extensions]]
-name = "Bot Gate probe: validation"
-handle = "probe-validation"
-uid = "36cf00c2-9773-1173-e6d3-e7d7caf9c6aa5b91f233"
+name = "Checkout rule"
+handle = "checkout-rule"
 type = "function"
-description = "Phase A probe. Never blocks; records checkout rule input."
+description = "Stage 1: blocks checkouts that match the blocklist (settings in Content > Metaobjects)."
 
   [[extensions.targeting]]
   target = "cart.validations.generate.run"
@@ -14,5 +13,5 @@ description = "Phase A probe. Never blocks; records checkout rule input."
 
   [extensions.build]
   command = "cargo build --target=wasm32-unknown-unknown --release"
-  path = "target/wasm32-unknown-unknown/release/probe-validation.wasm"
+  path = "target/wasm32-unknown-unknown/release/checkout-rule.wasm"
   watch = ["src/**/*.rs"]

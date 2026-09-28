@@ -3,7 +3,8 @@
 A small custom Shopify app that stops card-testing bots at MedicalRite's checkout **before a card reaches Authorize.net**, without real customers noticing.
 
 - Full spec: `docs/spec.md` (from Timur's brief, 2026-09-22). It is the source of truth; if this file and the spec disagree, the spec wins — flag the conflict.
-- Current phase: `docs/phase-a-spike.md`. **Do not build beyond the current phase.**
+- Decisions: `docs/decisions.md` (Timur, 2026-09-24) amend the spec and win over it.
+- Phase A (spike) is **done**: `docs/phase-a-findings.md`. Current phase: **Phase B, Stage 1 — blocklist checkout rule** (`docs/phase-b-plan.md`). **Do not build beyond the current stage.**
 - Stakeholders: Timur (owner of the brief, approves phase changes and go-live), Hexon (engineer, reviews all code).
 
 ## The three parts
@@ -20,12 +21,12 @@ Parts 1 and 2 **must import one shared scoring module** so they never disagree.
 
 1. The HMAC signing secret never reaches the browser, the theme, or any storefront-readable metafield. It lives in an app-owned (`$app:` namespace) metafield and server env only.
 2. Never hard-block a real visitor because Turnstile failed or was slow → issue a **soft** token instead (Part 1 lets it through, Part 2 adds +2).
-3. Exempt: returning customers (`numberOfOrders ≥ 1` skips token + score), draft/staff orders, B2B (purchasing company set). Logged-in customers skip the score but still need the token.
-4. Validation runs only at checkout, never on add-to-cart/cart page.
+3. Exempt: only **logged-in** customers skip the token (D3); draft orders via Shopify's "Ignore all checkout rules"; B2B (purchasing company set). Never trust `numberOfOrders` alone.
+4. Part 1 only returns errors when `buyerJourney.step == CHECKOUT_COMPLETION` (the function also runs on cart/checkout interaction).
 5. One generic block message for every rule (bots must not learn which rule fired):
    "We couldn't verify this checkout. Please refresh the page and try again, or call us at [number] and we'll help."
 6. No URL/query-string bypass of any kind.
-7. `mode: "log_only"` must never block; `enabled: false` must let everything through. Both are the kill switch.
+7. Fail open on errors (D5). `mode: "log_only"` must never block; `enabled: false` must let everything through. Both are the kill switch.
 8. Config comes from shop metafield `bot_gate.config` (JSON) — changing rules/thresholds must never require a redeploy.
 9. Log every block and would-be block with rule name + cart identifier.
 10. Constraint: no Shopify Payments. Gateway is Authorize.net. Store is Shopify Plus (required for custom apps with Functions).

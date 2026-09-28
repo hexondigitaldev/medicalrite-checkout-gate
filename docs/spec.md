@@ -1,5 +1,7 @@
 # Spec: Checkout Bot Gate (MedicalRite)
 
+> **Amended by `docs/decisions.md` (2026-09-24).** Where they differ, the decisions log wins.
+
 Source: "Project Brief: Checkout Bot Gate (MedicalRite)", prepared by Timur for the Shopify developer, 2026-09-22. Condensed faithfully; wording kept where it defines behaviour.
 
 ## Problem
@@ -79,7 +81,7 @@ We stay in control
 - Runs on Shopify's servers; returning an error stops checkout, no payment sent. Works with any gateway; can't be bypassed via myshopify.com or permalinks.
 - Runs only at `buyerJourney.step = CHECKOUT_COMPLETION` (plus `CHECKOUT_INTERACTION` if needed). Never on the cart page.
 - Can see: cart lines & cost, buyer identity (email, customer, numberOfOrders, logged-in state), shipping address, cart attributes (token). Can't see IP/browser; no network calls (hence Part 3).
-- Blocks if any: (1) token missing/invalid/expired; (2) shipping name on `blocked_names`; (3) address line on `blocked_address1`; (4) address line < 6 chars or no number; (5) email domain on `blocked_email_domains` (empty at launch).
+- Blocks if any: (1) token missing/invalid/expired; (2) shipping name on `blocked_names`; (3) address line on `blocked_address1`; (4) shipping ZIP on `blocked_zips`; (5) email domain on `blocked_email_domains` (empty at launch). ~~Address line < 6 chars or no number~~ — dropped (D9).
 - Buyer message (same for every rule): "We couldn't verify this checkout. Please refresh the page and try again, or call us at [number] and we'll help."
 
 ### Settings — shop metafield `bot_gate.config`
@@ -91,7 +93,8 @@ We stay in control
   "token_required": true,
   "hide_card_score": 7,
   "blocked_names": ["james anderson"],
-  "blocked_address1": ["428 st", "428 w 45th st", "230 west 55th street"],
+  "blocked_address1": ["428 st", "428 w 45th st", "230 west 55th street", "123 main st"],
+  "blocked_zips": ["10080"],
   "blocked_email_domains": []
 }
 ```

@@ -1,0 +1,10 @@
+mutation {
+  paymentCustomizationCreate(paymentCustomization: {
+    title: "Bot Gate probe"
+    enabled: true
+    functionHandle: "probe-payment"
+  }) {
+    paymentCustomization { id }
+    userErrors { field message }
+  }
+}

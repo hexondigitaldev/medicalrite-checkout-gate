@@ -20,15 +20,13 @@ fn cart_validations_generate_run(
     // A short summary line in the run log makes scanning many runs easier.
     let cart = input.cart();
     log!(
-        "probe step={:?} bg={} probe={} lines={} authed={} orders={:?}",
+        "probe step={:?} bg={} probe={} lines={} qty={} subtotal={}",
         input.buyer_journey().step(),
         cart.bg().is_some(),
         cart.probe().and_then(|a| a.value().map(|s| s.as_str())).unwrap_or(""),
         cart.lines().len(),
-        cart.buyer_identity().map(|b| *b.is_authenticated()).unwrap_or(false),
-        cart.buyer_identity()
-            .and_then(|b| b.customer())
-            .map(|c| *c.number_of_orders()),
+        cart.lines().iter().map(|l| *l.quantity()).sum::<i32>(),
+        cart.cost().subtotal_amount().amount(),
     );
 
     Ok(schema::CartValidationsGenerateRunResult {

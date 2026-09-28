@@ -1,0 +1,19 @@
+# Dev store only (app execute allows mutations on dev stores):
+# npx shopify app execute --store medicalrite-dev.myshopify.com --query-file scripts/dev-store/upsert-settings.graphql
+mutation {
+  metaobjectUpsert(
+    handle: { type: "$app:bot_gate_settings", handle: "main" }
+    metaobject: {
+      fields: [
+        { key: "enabled", value: "true" }
+        {
+          key: "config"
+          value: "{\"mode\":\"enforce\",\"support_phone\":\"(800) 548-6877\",\"skip_logged_in\":true,\"blocked_names\":[\"james anderson\"],\"blocked_address1\":[\"428 st\",\"428 w 45th st\",\"230 w 55th st\",\"123 main st\"],\"blocked_zips\":[\"10080\"],\"blocked_email_domains\":[]}"
+        }
+      ]
+    }
+  ) {
+    metaobject { id handle }
+    userErrors { field message }
+  }
+}
