@@ -17,7 +17,8 @@ pub struct Settings {
     pub skip_logged_in: bool,
     /// Stored already normalized.
     pub blocked_names: Vec<String>,
-    pub blocked_address1: Vec<String>,
+    /// (normalized street line, optional 5-digit ZIP it is tied to)
+    pub blocked_address1: Vec<(String, Option<String>)>,
     pub blocked_zips: Vec<String>,
     pub blocked_email_domains: Vec<String>,
     /// Problems found while reading settings (field names only, never values).
@@ -195,6 +196,44 @@ fn list(obj: &serde_json::Map<String, Value>, key: &'static str, norm: fn(&str) 
     }
 }
 
+/// Address entries: "428 st" (anywhere) or "428 w 45th st|10036" (only with that ZIP).
+fn address_entries(obj: &serde_json::Map<String, Value>, errors: &mut Vec<&'static str>) -> Vec<(String, Option<String>)> {
+    const KEY: &str = "blocked_address1";
+    let mut out: Vec<(String, Option<String>)> = Vec::new();
+    let mut bad = false;
+    match obj.get(KEY) {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(items)) => {
+            for it in items {
+                let Some(raw) = it.as_str() else { bad = true; continue };
+                if raw.trim().is_empty() {
+                    continue;
+                }
+                let (addr, zip) = match raw.split_once('|') {
+                    Some((a, z)) => match us_zip5(z) {
+                        Some(z5) => (normalize_address(a), Some(z5)),
+                        None => { bad = true; continue }
+                    },
+                    None => (normalize_address(raw), None),
+                };
+                if addr.is_empty() {
+                    bad = true;
+                    continue;
+                }
+                let e = (addr, zip);
+                if !out.contains(&e) {
+                    out.push(e);
+                }
+            }
+        }
+        Some(_) => bad = true,
+    }
+    if bad {
+        errors.push(KEY);
+    }
+    out
+}
+
 fn domain(s: &str) -> String {
     s.trim().trim_start_matches('@').to_lowercase()
 }
@@ -252,7 +291,7 @@ pub fn load(metaobject_present: bool, enabled: Option<&str>, config: Option<&str
         support_phone,
         skip_logged_in,
         blocked_names: list(&obj, "blocked_names", normalize_name, &mut errors),
-        blocked_address1: list(&obj, "blocked_address1", normalize_address, &mut errors),
+        blocked_address1: address_entries(&obj, &mut errors),
         blocked_zips: list(&obj, "blocked_zips", zip_entry, &mut errors),
         blocked_email_domains: list(&obj, "blocked_email_domains", domain, &mut errors),
         errors,
@@ -280,8 +319,11 @@ pub fn decide(c: &Checkout, loaded: &Loaded) -> Decision {
             hit("blocked_name");
         }
         if is_us(a) {
+            let zip = a.zip.as_deref().and_then(us_zip5);
             if let Some(a1) = a.address1.as_deref() {
-                if s.blocked_address1.iter().any(|b| address_matches(a1, b)) {
+                if s.blocked_address1.iter().any(|(b, bz)| {
+                    address_matches(a1, b) && bz.as_ref().map_or(true, |bz| zip.as_ref() == Some(bz))
+                }) {
                     hit("blocked_address1");
                 }
             }
@@ -353,7 +395,7 @@ mod tests {
         "mode": "enforce",
         "support_phone": "(800) 548-6877",
         "blocked_names": ["james anderson"],
-        "blocked_address1": ["428 st", "428 w 45th st", "230 west 55th street", "123 main st"],
+        "blocked_address1": ["428 st", "428 w 45th st|10036", "230 west 55th street|10019", "123 main st|10080"],
         "blocked_zips": ["10080"],
         "blocked_email_domains": []
     }"#;
@@ -429,13 +471,13 @@ mod tests {
 
     #[test]
     fn exact_with_trailing_dot() {
-        assert!(is_block(&decide(&checkout(("A", "B"), "123 Main St.", "11111", "a@b.com"), &enforce())));
+        assert!(is_block(&decide(&checkout(("A", "B"), "123 Main St.", "10080", "a@b.com"), &enforce())));
     }
 
     #[test]
     fn unit_tail_matches() {
         for a in ["123 Main St Apt 4", "123 Main St #4", "123 main street suite 200", "123 Main St Unit B"] {
-            assert!(is_block(&decide(&checkout(("A", "B"), a, "11111", "a@b.com"), &enforce())), "{}", a);
+            assert!(is_block(&decide(&checkout(("A", "B"), a, "10080", "a@b.com"), &enforce())), "{}", a);
         }
     }
 
@@ -621,5 +663,28 @@ mod tests {
         assert!(line.contains("\"addr\":0") && line.contains("\"email\":false"), "{}", line);
         let line = log_line(&decide(&bot(), &enforce()), &enforce(), &bot()).unwrap();
         assert!(line.contains("\"addr\":1") && line.contains("\"email\":true"), "{}", line);
+    }
+
+    #[test]
+    fn zip_scoped_addresses_only_match_with_their_zip() {
+        // Real buildings: blocked only with the ZIP the bots used (D12).
+        assert!(is_block(&decide(&checkout(("A", "B"), "428 W 45th St", "10036", "a@b.com"), &enforce())));
+        assert!(is_block(&decide(&checkout(("A", "B"), "230 West 55th Street", "10019-1234", "a@b.com"), &enforce())));
+        for (a, z) in [("428 W 45th St", "10018"), ("230 W 55th St", "90210"), ("123 Main St", "11111"), ("428 W 45th St", "")] {
+            assert_eq!(decide(&checkout(("A", "B"), a, z, "a@b.com"), &enforce()), Decision::Allow { reason: "clean" }, "{} {}", a, z);
+        }
+        // Unscoped "428 st" still blocks with any ZIP.
+        assert!(is_block(&decide(&checkout(("A", "B"), "428 st", "30308", "a@b.com"), &enforce())));
+    }
+
+    #[test]
+    fn bad_zip_scope_is_reported_and_skipped() {
+        let cfg = CONFIG.replace("\"428 w 45th st|10036\"", "\"428 w 45th st|1003\"");
+        let l = loaded(&cfg);
+        if let Loaded::Enabled(s) = &l {
+            assert!(s.errors.contains(&"blocked_address1"));
+            assert!(!s.blocked_address1.iter().any(|(a, _)| a == "428 w 45th st"));
+            assert_eq!(s.blocked_address1.len(), 3);
+        } else { panic!() }
     }
 }

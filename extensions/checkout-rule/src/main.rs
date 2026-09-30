@@ -95,7 +95,7 @@ mod glue_tests {
     use super::*;
     use shopify_function::run_function_with_input;
 
-    const CONFIG_ENFORCE: &str = r#"{\"mode\":\"enforce\",\"support_phone\":\"(800) 548-6877\",\"blocked_names\":[\"james anderson\"],\"blocked_address1\":[\"428 st\",\"428 w 45th st\",\"230 w 55th st\",\"123 main st\"],\"blocked_zips\":[\"10080\"],\"blocked_email_domains\":[]}"#;
+    const CONFIG_ENFORCE: &str = r#"{\"mode\":\"enforce\",\"support_phone\":\"(800) 548-6877\",\"blocked_names\":[\"james anderson\"],\"blocked_address1\":[\"428 st\",\"428 w 45th st|10036\",\"230 w 55th st|10019\",\"123 main st|10080\"],\"blocked_zips\":[\"10080\"],\"blocked_email_domains\":[]}"#;
 
     fn input(step: &str, settings: &str, address1: &str, authed: bool, company: &str) -> String {
         format!(
