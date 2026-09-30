@@ -1,0 +1,14 @@
+{
+  "name": "sc-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/lib.test.js test/handlers.test.js test/sf.test.js",
+    "deploy": "wrangler deploy",
+    "logs": "wrangler tail"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "wrangler": "^4"
+  }
+}

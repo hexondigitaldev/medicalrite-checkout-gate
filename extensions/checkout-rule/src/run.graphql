@@ -1,17 +1,32 @@
-# Input query cost budget: max 30 (Shopify). This query ≈ 21, leaving room for Stage 2
-# (token attribute, key metafield, line merchandise). Keep settings to 2 metaobject fields.
-query Input {
+# Input query cost budget: max 30 (Shopify, docs: leaf 1, metafield 3, metaobject 1,
+# metaobject field(key:) 3, containers/__typename/metafield value 0).
+# Stage 1 = 21. Stage 2 adds token value 1 + variant id 1 + keys metafield 3 + date 1
+# + pastFresh 1 = 28 / 30 (subtotal replaced total, same cost).
+#
+# $freshUntil comes from the function's input-variables metafield ($app:sc.v on the checkout
+# rule), rewritten by the token server on every key publish. The default makes a missing
+# metafield count as stale -> token check fails open (D5).
+query Input($freshUntil: DateTimeWithoutTimezone = "2000-01-01T00:00:00") {
   buyerJourney {
     step
   }
   cart {
+    token: attribute(key: "_bg") {
+      value
+    }
     cost {
-      totalAmount {
+      subtotalAmount {
         amount
       }
     }
     lines {
       quantity
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+        }
+      }
     }
     buyerIdentity {
       email
@@ -34,6 +49,13 @@ query Input {
     }
   }
   shop {
+    localTime {
+      date
+      pastFresh: dateTimeAfter(dateTime: $freshUntil)
+    }
+    keys: metafield(namespace: "$app:sc", key: "k") {
+      value
+    }
     settings: metaobject(handle: { type: "$app:bot_gate_settings", handle: "main" }) {
       enabled: field(key: "enabled") {
         value

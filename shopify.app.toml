@@ -2,7 +2,9 @@
 
 name = "Medicalrite Bot Gate"
 client_id = "95ea1c81ef6561574915f99863674d71"
-application_url = "https://shopify.dev/apps/default-app-home"
+# Stage 2: app home + app proxy are served by the dev token server (Cloudflare Worker "sc-dev").
+# Replace WORKER_HOST after the first `npm run deploy` in server/ (e.g. sc-dev.<you>.workers.dev).
+application_url = "https://WORKER_HOST"
 embedded = true
 
 [access_scopes]
@@ -10,10 +12,17 @@ embedded = true
 scopes = "read_payment_customizations,write_payment_customizations,read_validations,write_validations"
 
 [build]
-automatically_update_urls_on_dev = true
+# false: `shopify app dev` must not replace the Worker URLs with a tunnel.
+automatically_update_urls_on_dev = false
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+redirect_urls = [ "https://WORKER_HOST/" ]
+
+# Token endpoint on the storefront: /apps/sc/t  ->  https://WORKER_HOST/proxy/t
+[app_proxy]
+url = "https://WORKER_HOST/proxy"
+subpath = "sc"
+prefix = "apps"
 
 [webhooks]
 api_version = "2026-10"
@@ -34,5 +43,5 @@ required = true
 
 [metaobjects.app.bot_gate_settings.fields.config]
 name = "Rules (JSON)"
-description = "mode ('log_only' or 'enforce'), support_phone, skip_logged_in, blocked_names, blocked_address1, blocked_zips, blocked_email_domains. See docs/settings.md."
+description = "mode ('log_only' or 'enforce'), token_mode ('off', 'log_only' or 'enforce'), soft_tokens ('allow' or 'block'), support_phone, skip_logged_in, blocked_names, blocked_address1, blocked_zips, blocked_email_domains. See docs/settings.md."
 type = "json"

@@ -4,14 +4,14 @@ A small custom Shopify app that stops card-testing bots at MedicalRite's checkou
 
 - Full spec: `docs/spec.md` (from Timur's brief, 2026-09-22). It is the source of truth; if this file and the spec disagree, the spec wins — flag the conflict.
 - Decisions: `docs/decisions.md` (Timur, 2026-09-24) amend the spec and win over it.
-- Phase A (spike) is **done**: `docs/phase-a-findings.md`. Current phase: **Phase B, Stage 1 — blocklist checkout rule** (`docs/phase-b-plan.md`). **Do not build beyond the current stage.**
+- Phase A (spike) is **done**: `docs/phase-a-findings.md`. Stage 1 (blocklist) is live in log_only. Current phase: **Phase B, Stage 2 — browser token** (`docs/stage2-plan.md`). **Do not build beyond the current stage.**
 - Stakeholders: Timur (owner of the brief, approves phase changes and go-live), Hexon (engineer, reviews all code).
 
 ## The three parts
 
 | Part | Shopify surface | Job |
 |---|---|---|
-| 3 · Browser token | Theme app extension (JS) + app proxy `/apps/bot-gate/token` + app server | Cloudflare Turnstile → server verifies → returns HMAC-SHA256 token (cart binding method pending — see Q2 in `docs/phase-a-findings.md`) → theme saves it as cart attribute `_bg` |
+| 3 · Browser token | Theme app extension (JS) + app proxy `/apps/sc/t` + Cloudflare Worker (`server/`) | Cloudflare Turnstile → server verifies → returns HMAC-SHA256 token bound to cart contents, 30–60 min (D1) → theme saves it as cart attribute `_bg` |
 | 1 · Checkout rule | Cart & Checkout Validation Function | Hard-blocks at `CHECKOUT_COMPLETION`: no/invalid/expired token, blocklisted name/address/email domain, broken address |
 | 2 · Hide card | Payment Customization Function | Valid token but risk score ≥ `hide_card_score` → hide the Authorize.net card method |
 
@@ -27,7 +27,7 @@ Parts 1 and 2 **must import one shared scoring module** so they never disagree.
    "We couldn't verify this checkout. Please refresh the page and try again, or call us at [number] and we'll help."
 6. No URL/query-string bypass of any kind.
 7. Fail open on errors (D5). `mode: "log_only"` must never block; `enabled: false` must let everything through. Both are the kill switch.
-8. Config comes from shop metafield `bot_gate.config` (JSON) — changing rules/thresholds must never require a redeploy.
+8. Config comes from the app-owned metaobject `$app:bot_gate_settings` entry `main` (Content → Metaobjects) — changing rules/thresholds must never require a redeploy. Signing keys live in shop metafield `$app:sc.k` (server-written, no merchant access), never in the metaobject.
 9. Log every block and would-be block with rule name + cart identifier.
 10. Constraint: no Shopify Payments. Gateway is Authorize.net. Store is Shopify Plus (required for custom apps with Functions).
 11. Never commit secrets, API keys, `.env` files, or customer PII (the bot-order CSV stays out of git; use anonymised fixtures).

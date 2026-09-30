@@ -49,3 +49,8 @@ Note: an autofilled email is not a login — only a real sign-in sets `isAuthent
 - First check (560 most recent runs read through Dev Dashboard, read-only): 7 Pay-step runs, all `allow · clean`, `mode:log_only`, `n:[1,4,1,0]`, `cfg_errors:[]`. Log lines contain no PII.
 - Seen: one order produced 2 Pay-step runs 1 s apart (Shopify retry, normal); 2 Pay-step runs with `addr:0, email:false` (probably pickup or express) — watch in the review.
 - Run details (input) are visible in Dev Dashboard for the production app.
+
+## Found during Stage 2 (2026-09-30)
+
+- The ZIP-scoped address code (D12, critic round 4) was not in the repo, so **live runs without it**: `428 w 45th st|10036`, `230 w 55th st|10019`, `123 main st|10080` never match; `428 st` and ZIP 10080 still do. Log-only, so no customer impact, but the would-block counts under-report those two buildings. Fix is on `stage-2/token` and as a separate hotfix for live.
+- From the Stage 2 version the log line is `v:3` and uses `sub` (product subtotal) instead of `total`.

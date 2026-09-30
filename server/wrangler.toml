@@ -1,0 +1,48 @@
+# Dev environment Worker (Medicalrite Bot Gate app, dev store only).
+# A production Worker gets its own [env.production] section later, with its own secrets.
+name = "sc-dev"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+SHOP = "medicalrite-dev.myshopify.com"
+SHOPIFY_CLIENT_ID = "95ea1c81ef6561574915f99863674d71"
+TURNSTILE_HOSTNAMES = "medicalrite-dev.myshopify.com"
+API_VERSION = "2026-07"
+# Which X-Forwarded-For entry is the buyer: confirm on the dev store (stage2 dev test T8).
+IP_HEADER_POS = "first"
+# Production only: a storefront URL the cron checks for the helper script (alerts if a theme publish drops it).
+# STOREFRONT_URL = "https://www.example.com/"
+
+# Secrets (never in this file):
+#   npx wrangler secret put SHOPIFY_CLIENT_SECRET   (Dev Dashboard -> app -> Settings -> Client secret)
+#   npx wrangler secret put TURNSTILE_SECRET        (Cloudflare -> Turnstile -> store-check -> Settings)
+#   npx wrangler secret put MASTER_KEY              (64 random hex chars, see README)
+
+[[kv_namespaces]]
+binding = "STATE"
+id = "REPLACE_WITH_KV_ID"
+
+[[ratelimits]]
+name = "LIMIT_IP"
+namespace_id = "1001"
+simple = { limit = 30, period = 60 }
+
+# Soft tokens (Turnstile failed or slow): per IP (refuses), and a store-wide budget (never refuses,
+# only logs soft_over_budget for review). Cloudflare-side failures never count.
+[[ratelimits]]
+name = "LIMIT_SOFT"
+namespace_id = "1002"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "LIMIT_SOFT_ALL"
+namespace_id = "1003"
+simple = { limit = 60, period = 60 }
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[observability]
+enabled = true

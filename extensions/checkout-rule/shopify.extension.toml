@@ -5,7 +5,12 @@ name = "Checkout rule"
 handle = "checkout-rule"
 uid = "bacd2f47-4cd1-edd6-6296-ce63c8cca2127524e553"
 type = "function"
-description = "Stage 1: blocks checkouts that match the blocklist (settings in Content > Metaobjects)."
+description = "Blocks checkouts that match the blocklist or lack a valid store token (settings in Content > Metaobjects)."
+
+  # Input variable $freshUntil for run.graphql, written by the token server.
+  [extensions.input.variables]
+  namespace = "$app:sc"
+  key = "v"
 
   [[extensions.targeting]]
   target = "cart.validations.generate.run"
