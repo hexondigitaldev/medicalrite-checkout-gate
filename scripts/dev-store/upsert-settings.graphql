@@ -8,7 +8,7 @@ mutation {
         { key: "enabled", value: "true" }
         {
           key: "config"
-          value: "{\"mode\":\"enforce\",\"support_phone\":\"(800) 548-6877\",\"skip_logged_in\":true,\"blocked_names\":[\"james anderson\"],\"blocked_address1\":[\"428 st\",\"428 w 45th st\",\"230 w 55th st\",\"123 main st\"],\"blocked_zips\":[\"10080\"],\"blocked_email_domains\":[]}"
+          value: "{\"mode\":\"enforce\",\"support_phone\":\"(800) 548-6877\",\"skip_logged_in\":true,\"blocked_names\":[\"james anderson\"],\"blocked_address1\":[\"428 st\",\"428 w 45th st|10036\",\"230 w 55th st|10019\",\"123 main st|10080\"],\"blocked_zips\":[\"10080\"],\"blocked_email_domains\":[]}"
         }
       ]
     }

@@ -75,3 +75,9 @@ Status legend: **Answered (desk)** = from Shopify's 2026-07 function schemas/doc
 - All layers combined catch 494/495 (99.8%). Token alone 80.6%, address blocklist 92.9%, score ≥ 7 91.1%.
 - Malformed-address rule catches 0 ("428 st" is exactly 6 chars). W15 homepage wave shows bots can load pages → blocklist essential.
 - Details: `docs/phase-a-evidence/bot-csv-analysis.md`.
+
+## Live probe results (Sep 25–28)
+
+- 13/13 real web orders carried the theme value at Pay; 2/2 bot orders (MR53747, MR53750) did not → token rule would block bots, not these customers.
+- Recurpay renewals produce no Pay-step run → not affected by the checkout rule (D6).
+- Express PayPal (MR53822) and Google Pay (MR53824) from the checkout page **keep** the attribute (test orders by Timur, cancelled). Details: `docs/phase-a-evidence/live-probe-results.md`.

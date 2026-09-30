@@ -9,7 +9,7 @@ Approved by Timur 2026-09-24 (D10). Probes record only; they never block or hide
 | Theme app embed "Bot Gate probe" | On — live theme **medicalrite/main** (GitHub-connected) | 2026-09-25 |
 | Payment customization "Bot Gate probe" | **Deferred** — `shopify app execute` only allows mutations on dev stores; needs our app's own admin page (Stage 2 server) | |
 | Timur told "in" | _pending_ | |
-| Removed | _pending_ | |
+| Removed | **App uninstalled from the live store** (probes gone) | 2026-09-29 |
 
 Notes:
 - Existing checkout rule on live: "Discount Genie GWP Checkout Validation Rule" (Inactive). Keep in mind if it is ever activated alongside ours.

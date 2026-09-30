@@ -1,0 +1,40 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "2ddfa983c1b7e13fc7486d5c5a4ea6d9"
+name = "MR Checkout Tools"
+application_url = "https://shopify.dev/apps/default-app-home"
+embedded = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# read_customers: lets the Dev Dashboard show run details (our log line) for checkout-rule, whose
+# input reads email/addresses. Payment scopes are added in Stage 3.
+scopes = "read_customers,read_validations,write_validations"
+
+[auth]
+redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+
+[webhooks]
+api_version = "2026-10"
+
+[build]
+automatically_update_urls_on_dev = true
+
+# Stage 1 settings, editable by store staff in Shopify admin > Content > Metaobjects.
+# The checkout rule reads the entry with handle "main". Only TWO fields on purpose:
+# Shopify caps a function's input query cost at 30 and each metaobject field costs 4.
+[metaobjects.app.bot_gate_settings]
+name = "Checkout settings"
+description = "Checkout blocklist. Create ONE entry with handle 'main'. Changes apply within minutes, no redeploy."
+access.admin = "merchant_read_write"
+
+[metaobjects.app.bot_gate_settings.fields.enabled]
+name = "Enabled"
+description = "Kill switch. Off = the checkout rule lets every checkout through."
+type = "boolean"
+required = true
+
+[metaobjects.app.bot_gate_settings.fields.config]
+name = "Rules (JSON)"
+description = "mode ('log_only' or 'enforce'), support_phone, skip_logged_in, blocked_names, blocked_address1, blocked_zips, blocked_email_domains. See docs/settings.md."
+type = "json"

@@ -29,3 +29,12 @@
 - **Logged-in buyers skip the blocklist** by default (`skip_logged_in: true`) — ask Timur (spec: logged-in customers are never blocked).
 - **Broken settings fail open and are reported** in the log line (`cfg_errors`, list counts `n`).
 - Log line carries order-matching hints without PII: total, line count, quantity, logged-in.
+
+## 2026-09-29 — Timur's answers before go-live (Slack)
+
+| # | Topic | Decision |
+|---|---|---|
+| D11 | Logged-in customers | Skip the blocklist (`skip_logged_in: true`); would-be hits are still logged as `exempt_logged_in`. |
+| D12 | Real-building addresses | Tie them to their ZIP: `428 w 45th st|10036`, `230 w 55th st|10019`, `123 main st|10080` (the only ZIPs the bots used — 98, 132 and 1 orders). `428 st` stays unscoped. |
+| D13 | Support phone | Use the number on the site: (800) 548-6877. |
+| D14 | Go-ahead | Approved to create the production app and go live in log-only. |
