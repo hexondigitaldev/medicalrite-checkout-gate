@@ -1,0 +1,25 @@
+# Phase A probe (live-safe version): no customer or product fields, so the app
+# needs no read_customers / read_products scope and run logs stay visible.
+query Input {
+  buyerJourney {
+    step
+  }
+  cart {
+    bg: attribute(key: "_bg") {
+      key
+      value
+    }
+    probe: attribute(key: "_bg_probe") {
+      key
+      value
+    }
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
+    lines {
+      quantity
+    }
+  }
+}

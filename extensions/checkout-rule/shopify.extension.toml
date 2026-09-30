@@ -1,0 +1,18 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "Checkout rule"
+handle = "checkout-rule"
+uid = "bacd2f47-4cd1-edd6-6296-ce63c8cca2127524e553"
+type = "function"
+description = "Stage 1: blocks checkouts that match the blocklist (settings in Content > Metaobjects)."
+
+  [[extensions.targeting]]
+  target = "cart.validations.generate.run"
+  input_query = "src/run.graphql"
+  export = "cart_validations_generate_run"
+
+  [extensions.build]
+  command = "cargo build --target=wasm32-unknown-unknown --release"
+  path = "target/wasm32-unknown-unknown/release/checkout-rule.wasm"
+  watch = ["src/**/*.rs"]

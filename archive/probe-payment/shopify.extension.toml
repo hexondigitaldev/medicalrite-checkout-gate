@@ -3,6 +3,7 @@ api_version = "2026-07"
 [[extensions]]
 name = "Bot Gate probe: payment"
 handle = "probe-payment"
+uid = "05f47717-6845-b6cc-56d0-7832bdb4fc88e8972ce7"
 type = "function"
 description = "Phase A probe. Hides nothing unless configured; records payment methods."
 

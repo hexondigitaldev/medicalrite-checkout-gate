@@ -5,3 +5,7 @@ target/
 *.csv
 .shopify/
 .DS_Store
+data/
+__pycache__/
+*.pyc
+archive/*/target/

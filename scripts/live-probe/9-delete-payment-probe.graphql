@@ -1,0 +1,7 @@
+# Replace the id with the one returned by 1-create-payment-probe.graphql
+mutation {
+  paymentCustomizationDelete(id: "gid://shopify/PaymentCustomization/REPLACE_ME") {
+    deletedId
+    userErrors { field message }
+  }
+}

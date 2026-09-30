@@ -1,0 +1,46 @@
+# Input query cost budget: max 30 (Shopify). This query ≈ 21, leaving room for Stage 2
+# (token attribute, key metafield, line merchandise). Keep settings to 2 metaobject fields.
+query Input {
+  buyerJourney {
+    step
+  }
+  cart {
+    cost {
+      totalAmount {
+        amount
+      }
+    }
+    lines {
+      quantity
+    }
+    buyerIdentity {
+      email
+      isAuthenticated
+      purchasingCompany {
+        company {
+          id
+        }
+      }
+    }
+    deliveryGroups {
+      deliveryAddress {
+        firstName
+        lastName
+        name
+        address1
+        zip
+        countryCode
+      }
+    }
+  }
+  shop {
+    settings: metaobject(handle: { type: "$app:bot_gate_settings", handle: "main" }) {
+      enabled: field(key: "enabled") {
+        value
+      }
+      config: field(key: "config") {
+        value
+      }
+    }
+  }
+}

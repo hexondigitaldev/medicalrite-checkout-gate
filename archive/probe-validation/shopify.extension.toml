@@ -3,6 +3,7 @@ api_version = "2026-07"
 [[extensions]]
 name = "Bot Gate probe: validation"
 handle = "probe-validation"
+uid = "36cf00c2-9773-1173-e6d3-e7d7caf9c6aa5b91f233"
 type = "function"
 description = "Phase A probe. Never blocks; records checkout rule input."
 
