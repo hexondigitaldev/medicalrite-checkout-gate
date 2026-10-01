@@ -22,7 +22,7 @@ IP_HEADER_POS = "first"
 
 [[kv_namespaces]]
 binding = "STATE"
-id = "REPLACE_WITH_KV_ID"
+id = "e0e2c41673234b2ba46e12f2213a48de"
 
 [[ratelimits]]
 name = "LIMIT_IP"

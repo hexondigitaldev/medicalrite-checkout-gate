@@ -3,8 +3,8 @@
 name = "Medicalrite Bot Gate"
 client_id = "95ea1c81ef6561574915f99863674d71"
 # Stage 2: app home + app proxy are served by the dev token server (Cloudflare Worker "sc-dev").
-# Replace WORKER_HOST after the first `npm run deploy` in server/ (e.g. sc-dev.<you>.workers.dev).
-application_url = "https://WORKER_HOST"
+# Dev token server (Cloudflare Worker sc-dev), deployed from server/.
+application_url = "https://sc-dev.hexondigitaldev.workers.dev"
 embedded = true
 
 [access_scopes]
@@ -16,11 +16,11 @@ scopes = "read_payment_customizations,write_payment_customizations,read_validati
 automatically_update_urls_on_dev = false
 
 [auth]
-redirect_urls = [ "https://WORKER_HOST/" ]
+redirect_urls = [ "https://sc-dev.hexondigitaldev.workers.dev/" ]
 
-# Token endpoint on the storefront: /apps/sc/t  ->  https://WORKER_HOST/proxy/t
+# Token endpoint on the storefront: /apps/sc/t  ->  https://sc-dev.hexondigitaldev.workers.dev/proxy/t
 [app_proxy]
-url = "https://WORKER_HOST/proxy"
+url = "https://sc-dev.hexondigitaldev.workers.dev/proxy"
 subpath = "sc"
 prefix = "apps"
 
@@ -32,16 +32,16 @@ api_version = "2026-10"
 # Shopify caps a function's input query cost at 30 and each metaobject field costs 4.
 [metaobjects.app.bot_gate_settings]
 name = "Bot Gate settings"
-description = "Checkout blocklist. Create ONE entry with handle 'main'. Changes apply within minutes, no redeploy."
+description = "Checkout rules and token settings. Create ONE entry with handle 'main'. Changes apply within minutes, no redeploy."
 access.admin = "merchant_read_write"
 
 [metaobjects.app.bot_gate_settings.fields.enabled]
 name = "Enabled"
-description = "Kill switch. Off = the checkout rule lets every checkout through."
+description = "Kill switch. False = every checkout goes through."
 type = "boolean"
 required = true
 
 [metaobjects.app.bot_gate_settings.fields.config]
 name = "Rules (JSON)"
-description = "mode ('log_only' or 'enforce'), token_mode ('off', 'log_only' or 'enforce'), soft_tokens ('allow' or 'block'), support_phone, skip_logged_in, blocked_names, blocked_address1, blocked_zips, blocked_email_domains. See docs/settings.md."
+description = "Rules as JSON: mode, token_mode, blocklists, support_phone. See docs/settings.md."
 type = "json"
