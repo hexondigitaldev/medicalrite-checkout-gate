@@ -18,7 +18,7 @@ Blocklist (Stage 1) keeps running alongside. Logged-in customers skip the token 
 |---|---|---|
 | Expiry | Server rotates the signing key every 30 min; rule accepts current + previous key → token lives 30–60 min (D1). | Functions have no clock and no cart ID (Q2). |
 | Binding | Token covers sorted `variantId:qty` of the cart. | A copied token only works for an identical cart (Q2 option 3). |
-| Keys | Stored in an app-owned **shop metafield with no merchant access** (not the settings metaobject). Written by the Worker's cron via Admin API. | Keys never in the browser or merchant-editable data (hard rule). |
+| Keys | Stored in an app-owned metafield **on the checkout rule (validation)** — not the shop (T9: shop `$app` metafields are readable from Liquid), not the settings metaobject. Written by the Worker's cron via Admin API. | Keys never in the browser or merchant-editable data (hard rule). |
 | Admin API access | Worker handles the one-time OAuth install and keeps the offline token as a Worker secret/KV. | Needed for key rotation. |
 | Token rule mode | Its own `token_mode` (`off` / `log_only` / `enforce`) in the settings JSON, separate from the blocklist mode. | Roll out independently. |
 | Fail open (D5) | If the key metafield is missing/stale (server down), the rule allows and logs `token_unavailable`. Worker cron health check emails us when rotation fails. | A server outage must not block real buyers. |
@@ -56,7 +56,7 @@ Dev store (full flow + all checkout paths) → critic rounds → live with `toke
 
 | # | Test | Expect |
 |---|---|---|
-| T0 | **Before anything else:** deploy with NO `$app:sc.v` metafield and no Worker. `token_mode: "off"` + blocklist enforce + "428 st" → blocked with a normal log line. Then `token_mode: "log_only"` → `tok:"keys_stale"`. (Proves the query default works; if not, the whole rule — blocklist too — would stop running.) | as stated |
+| T0 | **Before anything else:** deploy with NO `$app:sc.vars` metafield and no Worker. `token_mode: "off"` + blocklist enforce + "428 st" → blocked with a normal log line. Then `token_mode: "log_only"` → `tok:"keys_stale"`. (Proves the query default works; if not, the whole rule — blocklist too — would stop running.) | as stated |
 | T1 | `cargo build` wasm size; Pay-step instruction count in Dev Dashboard | < 256 kB; < 11M (Stage 1: 112 kB, 207k) |
 | T2 | Add the checkout rule first, then open the app in admin | Page shows Connection: connected, Key update: published, Status: OK |
 | T3 | Normal checkout, `token_mode: log_only` | Log `tok:"ok"`, `tage` 0 or 1, `tid` matches Worker log |
@@ -66,15 +66,17 @@ Dev store (full flow + all checkout paths) → critic rounds → live with `toke
 | T7 | Block `challenges.cloudflare.com` in the browser (spec 12) | soft token, `tok:"soft"`, not blocked |
 | T8 | From two different networks (e.g. wifi and phone data), plus once with a fake `X-Forwarded-For`, call `/apps/sc/t` and log the header on the Worker (temporary debug) | pick the `IP_HEADER_POS` entry that differs per network and ignores the fake one |
 | T9 | Liquid `{{ shop.metafields['app--<id>--sc'].k }}` in a test theme + Storefront API query | empty (keys not readable from storefront) |
-| T10 | Stop the cron (or delete `$app:sc.v`), wait 70 min, checkout with no token in enforce | allowed, `tok:"keys_stale"` |
+| T10 | Stop the cron (or delete `$app:sc.vars`), wait 70 min, checkout with no token in enforce | allowed, `tok:"keys_stale"` |
 | T11 | Cart-page PayPal express right after a quantity change | `tok:"ok"` |
 | T12 | Logged-in customer without token in enforce; draft invoice with "Ignore all checkout rules" | allowed |
 | T13 | `token_mode: enforce` + `enabled: false` (spec 14); `log_only` (spec 13) | nothing blocked |
 
 ## Go-live gates (live, before enforce)
 
+- **Before deploying the Stage 2 function to live:** create a settings entry with handle `settings` (copy of `main`). From Stage 2 the rule reads `settings`; without it the rule fails open (log `mode:"none"`). Changed because a hidden leftover entry on the dev store holds the handle `main` and can't be deleted.
+
 - Worker deployed with production secrets; app opened once in admin; `/health` OK and an uptime monitor on it; `STOREFRONT_URL` set.
-- Theme: app embed on **and in the theme's `config/settings_data.json` on Qckbot's branch** (tell Brandon), site key set, Buy it now hidden (D16).
+- Theme: app embed on **and in the theme's `config/settings_data.json` on Qckbot's branch** (tell Brandon), site key set, Buy it now still off (it already is on live — keep it off; D16).
 - Turnstile widget has the live domains (with and without www).
 - Staff know: draft invoices need "Ignore all checkout rules".
 - Live checkout apps listed (anything that adds lines at checkout breaks the token — watch `bad_sig`).

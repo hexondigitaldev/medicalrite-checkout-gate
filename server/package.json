@@ -4,8 +4,10 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/lib.test.js test/handlers.test.js test/sf.test.js",
-    "deploy": "wrangler deploy",
-    "logs": "wrangler tail"
+    "deploy": "wrangler deploy --env=\"\"",
+    "logs": "wrangler tail --env=\"\"",
+    "deploy:prod": "wrangler deploy --env production",
+    "logs:prod": "wrangler tail --env production"
   },
   "devDependencies": {
     "jsdom": "^25.0.1",

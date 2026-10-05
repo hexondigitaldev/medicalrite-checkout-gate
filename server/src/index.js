@@ -3,8 +3,8 @@
 //   POST /proxy/t   app proxy (/apps/sc/t on the store): Turnstile check -> signed cart token
 //   GET  /          app home inside Shopify admin: (re)connects the app (token exchange), shows status
 //   GET  /health    200 when everything is fine, 503 + reasons otherwise (point an uptime monitor at it)
-//   cron (10 min)   publishes window keys ($app:sc.k on the shop) and the freshness input variable
-//                   ($app:sc.v on the checkout rule); optionally checks the storefront still loads sf.js
+//   cron (10 min)   publishes window keys ($app:sc.keys on the shop) and the freshness input variable
+//                   ($app:sc.vars on the checkout rule); optionally checks the storefront still loads sf.js
 //
 // Secrets (wrangler secret put): SHOPIFY_CLIENT_SECRET, TURNSTILE_SECRET, MASTER_KEY.
 // Nothing secret is ever returned to the browser or logged. No IPs or cart contents are logged.
@@ -67,7 +67,8 @@ export async function turnstile(env, response, ip, fetchImpl = fetch) {
   } catch {
     return ["s", "siteverify_unreachable"];
   }
-  if (!data.success) return ["s", "failed"];
+  // error-codes are Cloudflare's reason (e.g. invalid-input-secret, timeout-or-duplicate); no secrets in them.
+  if (!data.success) return ["s", `failed:${[].concat(data["error-codes"] || []).join("+").slice(0, 80)}`];
   const hosts = String(env.TURNSTILE_HOSTNAMES || "").split(",").map((h) => h.trim()).filter(Boolean);
   if (!hosts.includes(data.hostname)) return ["s", "hostname"];
   if (data.action !== "cart") return ["s", "action"];
@@ -136,7 +137,11 @@ const FIND = `{
   validations(first: 25) { nodes { id shopifyFunction { app { apiKey } title } } }
 }`;
 
-const SET = `mutation($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { field message code } } }`;
+// Also deletes the old shop-level copy of the keys (pre-T9 location, readable from theme Liquid).
+const SET = `mutation($m: [MetafieldsSetInput!]!, $d: [MetafieldIdentifierInput!]!) {
+  metafieldsSet(metafields: $m) { userErrors { field message code } }
+  metafieldsDelete(metafields: $d) { userErrors { field message } }
+}`;
 
 export async function publish(env, nowMs, force = false) {
   const w = windowOf(nowMs);
@@ -146,15 +151,26 @@ export async function publish(env, nowMs, force = false) {
   if (!token) throw new Error("not_connected (open the app in Shopify admin)");
   const found = await admin(env, token, FIND);
   const mine = found.validations.nodes.filter((v) => v.shopifyFunction && v.shopifyFunction.app && v.shopifyFunction.app.apiKey === env.SHOPIFY_CLIENT_ID);
-  const m = [{ ownerId: found.shop.id, namespace: "$app:sc", key: "k", type: "json", value: await keysetValue(env.MASTER_KEY, env.SHOP, w, nowMs) }];
-  // Every checkout rule of this app gets the freshness variable (normally exactly one).
-  for (const v of mine) m.push({ ownerId: v.id, namespace: "$app:sc", key: "v", type: "json", value: freshnessValue(w, found.shop.ianaTimezone, nowMs) });
-  const data = await admin(env, token, SET, { m });
+  if (!mine.length) {
+    await env.STATE.put("pub_at", JSON.stringify({ at: new Date(nowMs).toISOString(), rules: 0 }));
+    return "no checkout rule found yet";
+  }
+  // Keys and the freshness variable go on every checkout rule of this app (normally exactly one).
+  // Not on the shop: shop $app metafields are readable from theme Liquid (dev test T9).
+  const keys = await keysetValue(env.MASTER_KEY, env.SHOP, w, nowMs);
+  const vars = freshnessValue(w, found.shop.ianaTimezone, nowMs);
+  const m = [];
+  for (const v of mine) {
+    m.push({ ownerId: v.id, namespace: "$app:sc", key: "keys", type: "json", value: keys });
+    m.push({ ownerId: v.id, namespace: "$app:sc", key: "vars", type: "json", value: vars });
+  }
+  const d = [{ ownerId: found.shop.id, namespace: "$app:sc", key: "keys" }];
+  const data = await admin(env, token, SET, { m, d });
   const errs = data.metafieldsSet.userErrors;
   if (errs.length) throw new Error(`metafieldsSet: ${JSON.stringify(errs).slice(0, 300)}`);
   await env.STATE.put("pub", String(w + 1));
   await env.STATE.put("pub_at", JSON.stringify({ at: new Date(nowMs).toISOString(), rules: mine.length }));
-  return mine.length ? "published" : "published (no checkout rule found yet)";
+  return "published";
 }
 
 async function publishLogged(env, nowMs, force) {
@@ -225,7 +241,9 @@ export async function handleToken(req, env, url, nowMs, fetchImpl = fetch) {
   const w = signingWindow(cw, Number(await env.STATE.get("pub")));
   const t = await signToken(await windowKey(env.MASTER_KEY, env.SHOP, w), w, flag, body.c);
   // tid = window + first 8 signature chars: matches the checkout rule's log line.
-  log("token", { f: flag, why, lines: body.c.split(",").length, tid: `${w}.${t.split(".")[3].slice(0, 8)}`, stale_keys: w !== cw, soft_over_budget: overBudget || undefined });
+  // xff: how many X-Forwarded-For entries Shopify sent (dev test T8 decides IP_HEADER_POS); no IPs logged.
+  const xff = (req.headers.get("x-forwarded-for") || "").split(",").filter((x) => x.trim()).length;
+  log("token", { f: flag, why, xff, lines: body.c.split(",").length, tid: `${w}.${t.split(".")[3].slice(0, 8)}`, stale_keys: w !== cw, soft_over_budget: overBudget || undefined });
   // In fallback the key stays published until publishing recovers, so don't make browsers refresh early.
   return json({ t, f: flag, ttl: w === cw ? tokenTtl(w, nowMs) : 1800 });
 }
@@ -251,7 +269,16 @@ function page(env, title, rows) {
 async function handleHome(env, url, nowMs) {
   const idToken = url.searchParams.get("id_token");
   const shop = await verifyIdToken(idToken, env.SHOPIFY_CLIENT_ID, env.SHOPIFY_CLIENT_SECRET, nowMs);
-  if (!shop || shop !== env.SHOP) return new Response("Open this app from the Shopify admin.", { status: 401 });
+  if (!shop || shop !== env.SHOP) {
+    // Why it was refused (no token values logged): helps tell a wrong client secret from a missing token.
+    let claims = {};
+    try {
+      const p = JSON.parse(atob(String(idToken || "").split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+      claims = { aud_ok: p.aud === env.SHOPIFY_CLIENT_ID, dest: p.dest, expired: p.exp * 1000 < nowMs };
+    } catch {}
+    log("home_denied", { has_token: !!idToken, verified_shop: shop, ...claims });
+    return new Response("Open this app from the Shopify admin.", { status: 401 });
+  }
   // Re-exchange on every visit: repairs a revoked token (reinstall, scope change) as soon as staff open the app.
   let connect = "connected";
   try {

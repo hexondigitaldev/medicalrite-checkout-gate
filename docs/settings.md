@@ -1,6 +1,6 @@
 # Checkout settings (Stages 1 + 2)
 
-Where: Shopify admin → **Content → Metaobjects → Bot Gate settings** → entry with handle **`main`**.
+Where: Shopify admin → **Content → Metaobjects → Bot Gate settings** → entry with handle **`settings`** (Stage 1 on live used `main`; create `settings` before deploying Stage 2 to live).
 
 | Field | Meaning |
 |---|---|

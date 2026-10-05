@@ -46,3 +46,44 @@ crons = ["*/10 * * * *"]
 
 [observability]
 enabled = true
+
+# ---------------------------------------------------------------------------
+# Production Worker (MR Checkout Tools app, live store). Deploy: npx wrangler deploy --env production
+# Secrets are separate per env: npx wrangler secret put <NAME> --env production
+# Bindings and vars are NOT inherited from the top level, so everything is repeated here.
+[env.production]
+name = "sc-prod"
+workers_dev = true
+
+[env.production.vars]
+SHOP = "medicalritestore.myshopify.com"
+SHOPIFY_CLIENT_ID = "2ddfa983c1b7e13fc7486d5c5a4ea6d9"
+TURNSTILE_HOSTNAMES = "medicalrite.com,www.medicalrite.com,medicalritestore.myshopify.com"
+API_VERSION = "2026-07"
+IP_HEADER_POS = "first" # dev test T8: Shopify sends one X-Forwarded-For entry
+STOREFRONT_URL = "https://medicalrite.com/"
+
+[[env.production.kv_namespaces]]
+binding = "STATE"
+id = "PROD_KV_ID" # npx wrangler kv namespace create STATE --env production
+
+[[env.production.ratelimits]]
+name = "LIMIT_IP"
+namespace_id = "2001"
+simple = { limit = 30, period = 60 }
+
+[[env.production.ratelimits]]
+name = "LIMIT_SOFT"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+[[env.production.ratelimits]]
+name = "LIMIT_SOFT_ALL"
+namespace_id = "2003"
+simple = { limit = 60, period = 60 }
+
+[env.production.triggers]
+crons = ["*/10 * * * *"]
+
+[env.production.observability]
+enabled = true

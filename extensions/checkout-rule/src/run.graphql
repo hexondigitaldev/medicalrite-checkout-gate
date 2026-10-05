@@ -3,7 +3,7 @@
 # Stage 1 = 21. Stage 2 adds token value 1 + variant id 1 + keys metafield 3 + date 1
 # + pastFresh 1 = 28 / 30 (subtotal replaced total, same cost).
 #
-# $freshUntil comes from the function's input-variables metafield ($app:sc.v on the checkout
+# $freshUntil comes from the function's input-variables metafield ($app:sc.vars on the checkout
 # rule), rewritten by the token server on every key publish. The default makes a missing
 # metafield count as stale -> token check fails open (D5).
 query Input($freshUntil: DateTimeWithoutTimezone = "2000-01-01T00:00:00") {
@@ -48,15 +48,19 @@ query Input($freshUntil: DateTimeWithoutTimezone = "2000-01-01T00:00:00") {
       }
     }
   }
+  # Signing keys live on the checkout rule (validation) itself, not on the shop: shop metafields
+  # in $app namespaces are readable from theme Liquid (dev test T9), validation metafields are not.
+  validation {
+    keys: metafield(namespace: "$app:sc", key: "keys") {
+      value
+    }
+  }
   shop {
     localTime {
       date
       pastFresh: dateTimeAfter(dateTime: $freshUntil)
     }
-    keys: metafield(namespace: "$app:sc", key: "k") {
-      value
-    }
-    settings: metaobject(handle: { type: "$app:bot_gate_settings", handle: "main" }) {
+    settings: metaobject(handle: { type: "$app:bot_gate_settings", handle: "settings" }) {
       enabled: field(key: "enabled") {
         value
       }

@@ -4,7 +4,7 @@
 #   { metaobjectDefinitionByType(type: "$app:bot_gate_settings") { id name } }
 mutation {
   metaobjectUpsert(
-    handle: { type: "$app:bot_gate_settings", handle: "main" }
+    handle: { type: "$app:bot_gate_settings", handle: "settings" }
     metaobject: {
       fields: [
         { key: "enabled", value: "true" }

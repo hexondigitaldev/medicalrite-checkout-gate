@@ -47,7 +47,7 @@ test("hard token when Turnstile passes; ttl 30-60 min; token matches shared vect
 
 test("spec 12: every Turnstile problem gives a soft token, never an error", async () => {
   const cases = [
-    [siteverify({ success: false }), "failed"],
+    [siteverify({ success: false, "error-codes": ["invalid-input-secret"] }), "failed:invalid-input-secret"],
     [siteverify({}, 500), "siteverify_500"],
     [siteverify({}, 400), "failed"],
     [async () => { throw new Error("down"); }, "siteverify_unreachable"],
@@ -110,7 +110,7 @@ test("signs with the newest published window when publishing is behind (fail ope
   assert.equal(b.ttl, 1800, "no early refresh storm while in fallback");
 });
 
-test("publish writes keys on the shop and freshness on this app's checkout rule only", async () => {
+test("publish writes keys + freshness on this app's checkout rule only, and removes the old shop copy", async () => {
   const calls = [];
   const orig = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
@@ -125,19 +125,21 @@ test("publish writes keys on the shop and freshness on this app's checkout rule 
         ] },
       } }));
     }
-    return new Response(JSON.stringify({ data: { metafieldsSet: { userErrors: [] } } }));
+    return new Response(JSON.stringify({ data: { metafieldsSet: { userErrors: [] }, metafieldsDelete: { userErrors: [] } } }));
   };
   try {
     const e = env({ STATE: kv({ auth: JSON.stringify({ at: "shpat_x", exp: null, rt: null }) }) });
     assert.equal(await publish(e, NOW), "published");
     const m = calls[1].body.variables.m;
     assert.equal(m.length, 2);
-    assert.deepEqual([m[0].ownerId, m[0].namespace, m[0].key], ["gid://shopify/Shop/1", "$app:sc", "k"]);
+    assert.ok(m.every((x) => x.ownerId === "gid://shopify/Validation/7"), "nothing written to the shop or other apps' rules");
+    assert.deepEqual([m[0].namespace, m[0].key], ["$app:sc", "keys"]);
     const keys = JSON.parse(m[0].value);
     assert.deepEqual(Object.keys(keys.k).sort(), ["995431", "995432", "995433"]);
     assert.equal(keys.c, 995432);
-    assert.deepEqual([m[1].ownerId, m[1].key], ["gid://shopify/Validation/7", "v"]);
+    assert.equal(m[1].key, "vars");
     assert.match(JSON.parse(m[1].value).freshUntil, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/);
+    assert.deepEqual(calls[1].body.variables.d, [{ ownerId: "gid://shopify/Shop/1", namespace: "$app:sc", key: "keys" }]);
     assert.equal(calls[1].token, "shpat_x");
     assert.equal(await e.STATE.get("pub"), "995433");
     assert.equal(await publish(e, NOW), "up_to_date");

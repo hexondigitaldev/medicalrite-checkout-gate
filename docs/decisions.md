@@ -49,7 +49,7 @@
 ## 2026-09-30 — Stage 2 engineering decisions (builder)
 
 - **Token:** `1.<window>.<h|s>.<sig>`, sig = first 128 bits of HMAC-SHA256 over the window, hard/soft flag and the cart content (`variantId:qty`, summed per variant, sorted). Bound to cart contents (D1), not a cart ID (none in the function input, Q2).
-- **Keys and expiry:** one key per 30-min window, derived on the server from `MASTER_KEY` (Worker secret, never published). The server publishes only the keys for previous/current/next window to app-owned shop metafield `$app:sc.k` every 10 min. The rule accepts a token while its window key is published → lifetime 30–60 min. Tradeoff: published window keys are visible to app developers in Dev Dashboard run logs (not to merchants or storefront); each key is only useful for ~90 minutes.
+- **Keys and expiry:** one key per 30-min window, derived on the server from `MASTER_KEY` (Worker secret, never published). The server publishes only the keys for previous/current/next window to metafield `$app:sc.keys` on the checkout rule (validation) every 10 min (was the shop until dev test T9 showed shop `$app` metafields are readable from theme Liquid). The rule accepts a token while its window key is published → lifetime 30–60 min. Tradeoff: published window keys are visible to app developers in Dev Dashboard run logs (not to merchants or storefront); each key is only useful for ~90 minutes.
 - **Soft tokens (spec rule 2, test 12):** if Turnstile fails, errors, or takes >6 s, the server still issues a token flagged `s`. Policy `soft_tokens`: `allow` (default, spec), `risky` (fails only on the bot cart shape), `block`. Rate limits: 30/min/IP overall and 10/min/IP for soft (refused with 429); a store-wide soft budget of 60/min never refuses (that would block real soft buyers) but logs `soft_over_budget`. Failures on Cloudflare's side never count. Open question D17.
 - **Fail open (D5):** the server writes the rule's input variable `freshUntil` (shop time, ~70 min ahead) on every publish; once it passes, the token check lets everyone through (`keys_stale`). Also: keys missing → allow; publish date 2+ days old → allow; publishing behind → server signs with the newest window the rule has. `/health` returns 503 with reasons.
 - **Logged-in buyers never need a token (D3)**, independent of `skip_logged_in` (which only controls the blocklist, D11).
@@ -58,3 +58,13 @@
 - **Server:** Cloudflare Worker (free plan). App proxy `/apps/sc/t`, signature verified with the app secret; admin access by token exchange when the app is opened in admin (offline token kept in Worker KV).
 - **Theme:** app embed "Storefront helper" (neutral names), reads `/cart.js`, refreshes the token on load, after every cart change and every 20 min, and holds the checkout button (max 8 s) while a refresh is running.
 - **Found during Stage 2 build:** the ZIP-scoped address change (D12) had not been saved to the repo, so live runs without it (ZIP-scoped entries never match; `428 st` and ZIP 10080 still work; live is log-only so no customer impact). Restored on `stage-2/token`; must be deployed to live before enforcing the blocklist.
+
+- **2026-10-01: settings entry handle is now `settings` (was `main`).** On the dev store a hidden leftover entry kept the handle `main` after `app dev clean` + reinstall and cannot be deleted. Live must get a `settings` entry before the Stage 2 function is deployed there.
+- **2026-10-01: Buy it now is already off on live.** Checked 4 live product pages (medicalrite.com): no Buy it now / dynamic checkout button; only the cart-type express buttons (`shopify-accelerated-checkout-cart`, cart drawer), which keep the token (Phase A). D16 needs no change now — just keep it off (tell Brandon/Qckbot not to turn it on).
+
+## Timur's answers (2026-10-05, Slack)
+- **Stage 1: blocklist to enforce — approved.** Live entry `main` switched `log_only` → `enforce` on 2026-10-05. Checked on live: guest checkout to `428 W 45th St 10036` shows "We couldn't verify this checkout… (800) 548-6877" at Pay, no charge.
+- **D17 soft tokens:** keep allowing them (`soft_tokens: allow`); decide after a few days of log-only data.
+- **D18 Cloudflare paid plan ($5/month):** approved. Asked Timur for a MedicalRite Cloudflare account (Workers Paid); until then `sc-prod` runs on Hexon's account in log-only, moved before token enforce.
+- **D19 refresh timing** (renew under 25 min left or on cart change): approved.
+- Timur: keep watching performance and keep improving as data comes in.

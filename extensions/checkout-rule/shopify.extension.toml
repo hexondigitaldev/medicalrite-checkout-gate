@@ -10,7 +10,7 @@ description = "Blocks checkouts that match the blocklist or lack a valid store t
   # Input variable $freshUntil for run.graphql, written by the token server.
   [extensions.input.variables]
   namespace = "$app:sc"
-  key = "v"
+  key = "vars"
 
   [[extensions.targeting]]
   target = "cart.validations.generate.run"

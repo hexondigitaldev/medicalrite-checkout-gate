@@ -27,7 +27,7 @@ Parts 1 and 2 **must import one shared scoring module** so they never disagree.
    "We couldn't verify this checkout. Please refresh the page and try again, or call us at [number] and we'll help."
 6. No URL/query-string bypass of any kind.
 7. Fail open on errors (D5). `mode: "log_only"` must never block; `enabled: false` must let everything through. Both are the kill switch.
-8. Config comes from the app-owned metaobject `$app:bot_gate_settings` entry `main` (Content → Metaobjects) — changing rules/thresholds must never require a redeploy. Signing keys live in shop metafield `$app:sc.k` (server-written, no merchant access), never in the metaobject.
+8. Config comes from the app-owned metaobject `$app:bot_gate_settings` entry `settings` (was `main` in Stage 1) (Content → Metaobjects) — changing rules/thresholds must never require a redeploy. Signing keys live in metafield `$app:sc.keys` **on the checkout rule (validation)**, server-written — never on the shop (shop `$app` metafields are readable from theme Liquid, dev test T9), never in the metaobject.
 9. Log every block and would-be block with rule name + cart identifier.
 10. Constraint: no Shopify Payments. Gateway is Authorize.net. Store is Shopify Plus (required for custom apps with Functions).
 11. Never commit secrets, API keys, `.env` files, or customer PII (the bot-order CSV stays out of git; use anonymised fixtures).
@@ -50,3 +50,8 @@ Parts 1 and 2 **must import one shared scoring module** so they never disagree.
 - **Critic** (`.claude/agents/critic.md`): reviews each PR against this file and the spec; opens concrete issues; repeats until nothing is left.
 - A PR is done when: tests pass, critic has no open findings, Hexon has reviewed, and the relevant spec test cases are ticked in the PR description.
 - Ask rather than guess on anything that changes customer-facing behaviour.
+
+## Deploy rule (after the 2026-10-05 incident)
+- Always pass `--config` explicitly: dev = `npx shopify app deploy --config shopify.app.toml`, live = `--config production`. The CLI remembers the last config, so a bare `shopify app deploy` can go to live.
+- Before answering "yes" to "Release a new version of …", check the app name: **Medicalrite Bot Gate** = dev, **MR Checkout Tools** = live.
+- On the dev store an `app dev` preview always overrides released versions. After a dev deploy, run `npx shopify app dev --config shopify.app.toml` once (wait for Ready, press q) so the preview has the same code. Don't use `app dev clean` (it deletes the settings definition).

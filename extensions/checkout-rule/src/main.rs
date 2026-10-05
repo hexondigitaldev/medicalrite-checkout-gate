@@ -79,7 +79,7 @@ fn cart_validations_generate_run(
         let local = input.shop().local_time();
         checkout.token = Some(token::check(
             cart.token().and_then(|a| a.value()).map(|s| s.as_str()),
-            input.shop().keys().map(|m| m.value().as_str()),
+            input.validation().keys().map(|m| m.value().as_str()),
             Some(local.date().as_str()),
             *local.past_fresh(),
             &lines,
@@ -220,9 +220,9 @@ mod glue_tests {
     "buyerIdentity": {{ "email": "someone@gmail.com", "isAuthenticated": {authed}, "purchasingCompany": null }},
     "deliveryGroups": [ {{ "deliveryAddress": {{ "firstName": "Mary", "lastName": "Smith", "name": "Mary Smith", "address1": "1 Real Rd", "zip": "90210", "countryCode": "US" }} }} ]
   }},
+  "validation": {{ "keys": {keys} }},
   "shop": {{
     "localTime": {{ "date": "2026-09-30", "pastFresh": {past_fresh} }},
-    "keys": {keys},
     "settings": {{ "enabled": {{ "value": "true" }}, "config": {{ "value": "{cfg}" }} }}
   }}
 }}"#

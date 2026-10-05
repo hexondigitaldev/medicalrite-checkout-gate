@@ -8,7 +8,7 @@ Design: `docs/stage2-plan.md`, `docs/decisions.md` (Stage 2 engineering decision
 | `POST /proxy/t` | App proxy target (`/apps/sc/t` on the store). Turnstile check → signed token. |
 | `GET /` | App home in Shopify admin. Opening it once connects the app (token exchange) and publishes keys. |
 | `GET /health` | `200` when the checkout rule has the current key, `503` otherwise. Point an uptime monitor at it. |
-| cron (10 min) | Publishes window keys to shop metafield `$app:sc.k`. |
+| cron (10 min) | Publishes window keys + freshness to metafields `$app:sc.keys` / `$app:sc.vars` on this app's checkout rule (validation). Not on the shop: readable from Liquid (T9). |
 
 ## One-time setup (dev)
 

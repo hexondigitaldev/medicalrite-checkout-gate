@@ -28,11 +28,11 @@ prefix = "apps"
 api_version = "2026-10"
 
 # Stage 1 settings, editable by store staff in Shopify admin > Content > Metaobjects.
-# The checkout rule reads the entry with handle "main". Only TWO fields on purpose:
+# The checkout rule reads the entry with handle "settings" (was "main" until Stage 2). Only TWO fields on purpose:
 # Shopify caps a function's input query cost at 30 and each metaobject field costs 4.
 [metaobjects.app.bot_gate_settings]
 name = "Bot Gate settings"
-description = "Checkout rules and token settings. Create ONE entry with handle 'main'. Changes apply within minutes, no redeploy."
+description = "Checkout rules and token settings. Create ONE entry with handle 'settings'. Changes apply within minutes, no redeploy."
 access.admin = "merchant_read_write"
 
 [metaobjects.app.bot_gate_settings.fields.enabled]

@@ -9,7 +9,7 @@
 //!
 //! Keys: the server derives one key per window from a master secret that never leaves the
 //! server, and publishes only the keys for (current-1, current, current+1) into an app-owned
-//! shop metafield `$app:sc.k` (no merchant or storefront access):
+//! shop metafield `$app:sc.keys` (no merchant or storefront access):
 //!   {"v":1,"d":"YYYY-MM-DD","c":<current window>,"k":{"<window>":"<64 hex>", ...}}
 //! A token is valid while its window's key is still published => 30-60 minutes (D1).
 //! Functions have no clock, so expiry comes from key rotation (Phase A, Q2).
