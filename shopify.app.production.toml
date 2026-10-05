@@ -2,7 +2,8 @@
 
 client_id = "2ddfa983c1b7e13fc7486d5c5a4ea6d9"
 name = "MR Checkout Tools"
-application_url = "https://shopify.dev/apps/default-app-home"
+# Stage 2: app home + app proxy are served by the production token server (Cloudflare Worker "sc-prod").
+application_url = "https://sc-prod.hexondigitaldev.workers.dev"
 embedded = true
 
 [access_scopes]
@@ -12,29 +13,35 @@ embedded = true
 scopes = "read_customers,read_validations,write_validations"
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+redirect_urls = [ "https://sc-prod.hexondigitaldev.workers.dev/" ]
+
+# Token endpoint on the storefront: /apps/sc/t  ->  https://sc-prod.hexondigitaldev.workers.dev/proxy/t
+[app_proxy]
+url = "https://sc-prod.hexondigitaldev.workers.dev/proxy"
+subpath = "sc"
+prefix = "apps"
 
 [webhooks]
 api_version = "2026-10"
 
 [build]
-automatically_update_urls_on_dev = true
+automatically_update_urls_on_dev = false
 
 # Stage 1 settings, editable by store staff in Shopify admin > Content > Metaobjects.
-# The checkout rule reads the entry with handle "main". Only TWO fields on purpose:
+# The checkout rule reads the entry with handle "settings" (was "main" until Stage 2). Only TWO fields on purpose:
 # Shopify caps a function's input query cost at 30 and each metaobject field costs 4.
 [metaobjects.app.bot_gate_settings]
 name = "Checkout settings"
-description = "Checkout blocklist. Create ONE entry with handle 'main'. Changes apply within minutes, no redeploy."
+description = "Checkout blocklist. Create ONE entry with handle 'settings'. Changes apply within minutes, no redeploy."
 access.admin = "merchant_read_write"
 
 [metaobjects.app.bot_gate_settings.fields.enabled]
 name = "Enabled"
-description = "Kill switch. Off = the checkout rule lets every checkout through."
+description = "Kill switch. False = every checkout goes through."
 type = "boolean"
 required = true
 
 [metaobjects.app.bot_gate_settings.fields.config]
 name = "Rules (JSON)"
-description = "mode ('log_only' or 'enforce'), support_phone, skip_logged_in, blocked_names, blocked_address1, blocked_zips, blocked_email_domains. See docs/settings.md."
+description = "Rules as JSON: mode, token_mode, blocklists, support_phone. See docs/settings.md."
 type = "json"

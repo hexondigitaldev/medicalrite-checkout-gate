@@ -7,8 +7,42 @@
 //! - One generic message for every rule.
 //! - Address and ZIP rules apply to US addresses only; names are matched without
 //!   street-word abbreviations; address entries match exactly (plus an explicit unit tail).
+//! - Stage 2 token check has its own `token_mode` (off / log_only / enforce, default off),
+//!   so it can be rolled out separately from the blocklist. Key problems fail open.
 
+use crate::token::{Checked, Status as TokenStatus};
 use serde_json::Value;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum TokenMode {
+    #[default]
+    Off,
+    LogOnly,
+    Enforce,
+}
+
+/// What a soft token (Turnstile failed or slow) counts as.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum SoftPolicy {
+    /// Passes (spec rule 2 / test 12).
+    #[default]
+    Allow,
+    /// Fails only on the bot cart shape: guest, one line, quantity 1, subtotal under $5
+    /// (interim until Stage 3 scoring; a real buyer with that cart can still call or log in).
+    Risky,
+    /// Always fails (emergency switch).
+    Block,
+}
+
+impl TokenMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            TokenMode::Off => "off",
+            TokenMode::LogOnly => "log_only",
+            TokenMode::Enforce => "enforce",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Settings {
@@ -21,6 +55,9 @@ pub struct Settings {
     pub blocked_address1: Vec<(String, Option<String>)>,
     pub blocked_zips: Vec<String>,
     pub blocked_email_domains: Vec<String>,
+    pub token_mode: TokenMode,
+    /// Spec test 12: soft tokens pass by default (D17 pending with Timur).
+    pub soft_tokens: SoftPolicy,
     /// Problems found while reading settings (field names only, never values).
     pub errors: Vec<&'static str>,
 }
@@ -50,9 +87,12 @@ pub struct Checkout {
     pub is_authenticated: bool,
     pub is_b2b: bool,
     pub addresses: Vec<Address>,
-    pub total: Option<String>,
+    /// Product subtotal (for the soft-token cart shape and for matching logs to orders).
+    pub subtotal: Option<String>,
     pub lines: usize,
     pub qty: i64,
+    /// None when the token check did not run (token_mode off).
+    pub token: Option<Checked>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,7 +103,8 @@ pub enum Decision {
     /// Exempt buyer (e.g. logged in) whose checkout WOULD have matched: allowed, but logged.
     Exempt { reason: &'static str, rules: Vec<&'static str> },
     WouldBlock { rules: Vec<&'static str> },
-    Block { rules: Vec<&'static str>, message: String },
+    /// `rules` = everything that matched; `enforced` = the ones whose mode is enforce.
+    Block { rules: Vec<&'static str>, enforced: Vec<&'static str>, message: String },
 }
 
 const STREET_WORDS: &[(&str, &str)] = &[
@@ -196,6 +237,14 @@ fn list(obj: &serde_json::Map<String, Value>, key: &'static str, norm: fn(&str) 
     }
 }
 
+fn domain(s: &str) -> String {
+    s.trim().trim_start_matches('@').to_lowercase()
+}
+
+fn zip_entry(s: &str) -> String {
+    us_zip5(s).unwrap_or_default()
+}
+
 /// Address entries: "428 st" (anywhere) or "428 w 45th st|10036" (only with that ZIP).
 fn address_entries(obj: &serde_json::Map<String, Value>, errors: &mut Vec<&'static str>) -> Vec<(String, Option<String>)> {
     const KEY: &str = "blocked_address1";
@@ -232,14 +281,6 @@ fn address_entries(obj: &serde_json::Map<String, Value>, errors: &mut Vec<&'stat
         errors.push(KEY);
     }
     out
-}
-
-fn domain(s: &str) -> String {
-    s.trim().trim_start_matches('@').to_lowercase()
-}
-
-fn zip_entry(s: &str) -> String {
-    us_zip5(s).unwrap_or_default()
 }
 
 /// `enabled` and `config` are the raw metaobject field values (None = field absent).
@@ -279,9 +320,42 @@ pub fn load(metaobject_present: bool, enabled: Option<&str>, config: Option<&str
             true
         }
     };
+    let token_mode = match obj.get("token_mode") {
+        None | Some(Value::Null) => TokenMode::Off,
+        Some(Value::String(m)) => match m.trim().to_ascii_lowercase().as_str() {
+            "off" => TokenMode::Off,
+            "log_only" => TokenMode::LogOnly,
+            "enforce" => TokenMode::Enforce,
+            _ => {
+                errors.push("token_mode");
+                TokenMode::LogOnly // typo never blocks, but stays visible
+            }
+        },
+        Some(_) => {
+            errors.push("token_mode");
+            TokenMode::LogOnly
+        }
+    };
+    let soft_tokens = match obj.get("soft_tokens") {
+        None | Some(Value::Null) => SoftPolicy::Allow,
+        Some(Value::String(v)) => match v.trim().to_ascii_lowercase().as_str() {
+            "allow" => SoftPolicy::Allow,
+            "risky" => SoftPolicy::Risky,
+            "block" => SoftPolicy::Block,
+            _ => {
+                errors.push("soft_tokens");
+                SoftPolicy::Allow
+            }
+        },
+        Some(_) => {
+            errors.push("soft_tokens");
+            SoftPolicy::Allow
+        }
+    };
     const KNOWN: &[&str] = &[
         "mode", "support_phone", "skip_logged_in", "blocked_names",
         "blocked_address1", "blocked_zips", "blocked_email_domains",
+        "token_mode", "soft_tokens",
     ];
     if obj.keys().any(|k| !KNOWN.contains(&k.as_str())) {
         errors.push("unknown_key");
@@ -294,8 +368,39 @@ pub fn load(metaobject_present: bool, enabled: Option<&str>, config: Option<&str
         blocked_address1: address_entries(&obj, &mut errors),
         blocked_zips: list(&obj, "blocked_zips", zip_entry, &mut errors),
         blocked_email_domains: list(&obj, "blocked_email_domains", domain, &mut errors),
+        token_mode,
+        soft_tokens,
         errors,
     })
+}
+
+/// Whether the caller needs to compute the token status at all.
+pub fn token_mode(loaded: &Loaded) -> TokenMode {
+    match loaded {
+        Loaded::Enabled(s) => s.token_mode,
+        _ => TokenMode::Off,
+    }
+}
+
+/// Guest, one line, quantity 1, product subtotal under $5 — the shape of every bot order so far.
+fn bot_shape(c: &Checkout) -> bool {
+    let sub = c.subtotal.as_deref().and_then(|v| v.trim().parse::<f64>().ok());
+    !c.is_authenticated && c.lines == 1 && c.qty == 1 && matches!(sub, Some(v) if v < 5.0)
+}
+
+/// Rule name for a token problem; None = token fine or check failed open.
+fn token_rule(status: TokenStatus, soft: SoftPolicy, shape: bool) -> Option<&'static str> {
+    match status {
+        TokenStatus::Ok | TokenStatus::KeysMissing | TokenStatus::KeysStale => None,
+        TokenStatus::Soft => match soft {
+            SoftPolicy::Allow => None,
+            SoftPolicy::Risky => if shape { Some("token_soft_risky") } else { None },
+            SoftPolicy::Block => Some("token_soft"),
+        },
+        TokenStatus::Missing => Some("token_missing"),
+        TokenStatus::Malformed | TokenStatus::BadSig => Some("token_invalid"),
+        TokenStatus::Expired => Some("token_expired"),
+    }
 }
 
 pub fn decide(c: &Checkout, loaded: &Loaded) -> Decision {
@@ -341,16 +446,38 @@ pub fn decide(c: &Checkout, loaded: &Loaded) -> Decision {
         }
     }
 
-    if rules.is_empty() {
-        Decision::Allow { reason: "clean" }
-    } else if c.is_b2b {
-        Decision::Exempt { reason: "exempt_b2b", rules }
-    } else if c.is_authenticated && s.skip_logged_in {
-        Decision::Exempt { reason: "exempt_logged_in", rules }
-    } else if s.enforce {
-        Decision::Block { rules, message: block_message(&s.support_phone) }
+    let block_rules = rules;
+    let token_hit = match (s.token_mode, &c.token) {
+        (TokenMode::Off, _) | (_, None) => None,
+        (_, Some(t)) => token_rule(t.status, s.soft_tokens, bot_shape(c)),
+    };
+    let mut all = block_rules.clone();
+    all.extend(token_hit);
+    if all.is_empty() {
+        return Decision::Allow { reason: "clean" };
+    }
+    if c.is_b2b {
+        return Decision::Exempt { reason: "exempt_b2b", rules: all };
+    }
+    // Logged in: the token never applies (D3); the blocklist applies only if skip_logged_in is off (D11).
+    let (eff_block, eff_token) = if c.is_authenticated {
+        (if s.skip_logged_in { Vec::new() } else { block_rules }, None)
     } else {
-        Decision::WouldBlock { rules }
+        (block_rules, token_hit)
+    };
+    let mut enforced: Vec<&'static str> = Vec::new();
+    if s.enforce {
+        enforced.extend(eff_block.iter().copied());
+    }
+    if s.token_mode == TokenMode::Enforce {
+        enforced.extend(eff_token);
+    }
+    if !enforced.is_empty() {
+        Decision::Block { rules: all, enforced, message: block_message(&s.support_phone) }
+    } else if !eff_block.is_empty() || eff_token.is_some() {
+        Decision::WouldBlock { rules: all }
+    } else {
+        Decision::Exempt { reason: "exempt_logged_in", rules: all }
     }
 }
 
@@ -366,23 +493,33 @@ pub fn log_line(d: &Decision, loaded: &Loaded, c: &Checkout) -> Option<String> {
         Decision::Allow { reason } => ("allow", format!("\"reason\":\"{}\"", reason)),
         Decision::Exempt { reason, rules } => ("allow", format!("\"reason\":\"{}\",\"rules\":[{}]", reason, json_str_list(rules))),
         Decision::WouldBlock { rules } => ("would_block", format!("\"rules\":[{}]", json_str_list(rules))),
-        Decision::Block { rules, .. } => ("block", format!("\"rules\":[{}]", json_str_list(rules))),
+        Decision::Block { rules, enforced, .. } => ("block", format!("\"rules\":[{}],\"enf\":[{}]", json_str_list(rules), json_str_list(enforced))),
     };
     let settings = match loaded {
         Loaded::Missing => "\"mode\":\"none\"".to_string(),
         Loaded::Disabled => "\"mode\":\"disabled\"".to_string(),
         Loaded::Enabled(s) => format!(
-            "\"mode\":\"{}\",\"n\":[{},{},{},{}],\"cfg_errors\":[{}],\"phone_missing\":{}",
+            "\"mode\":\"{}\",\"tmode\":\"{}\",\"tok\":\"{}\",{}\"n\":[{},{},{},{}],\"cfg_errors\":[{}],\"phone_missing\":{}",
             if s.enforce { "enforce" } else { "log_only" },
+            s.token_mode.as_str(),
+            c.token.as_ref().map(|t| t.status.as_str()).unwrap_or("off"),
+            match &c.token {
+                Some(t) => format!(
+                    "{}{}",
+                    t.tid.as_ref().map(|x| format!("\"tid\":\"{}\",", x)).unwrap_or_default(),
+                    t.age.map(|a| format!("\"tage\":{},", a)).unwrap_or_default()
+                ),
+                None => String::new(),
+            },
             s.blocked_names.len(), s.blocked_address1.len(), s.blocked_zips.len(), s.blocked_email_domains.len(),
             json_str_list(&s.errors),
             s.support_phone.is_empty()
         ),
     };
-    let total: String = c.total.as_deref().unwrap_or("").chars().filter(|ch| ch.is_ascii_digit() || *ch == '.').collect();
+    let sub: String = c.subtotal.as_deref().unwrap_or("").chars().filter(|ch| ch.is_ascii_digit() || *ch == '.').collect();
     Some(format!(
-        "{{\"v\":2,\"decision\":\"{}\",{},{},\"total\":\"{}\",\"lines\":{},\"qty\":{},\"authed\":{},\"addr\":{},\"email\":{}}}",
-        decision, detail, settings, total, c.lines, c.qty, c.is_authenticated,
+        "{{\"v\":3,\"decision\":\"{}\",{},{},\"sub\":\"{}\",\"lines\":{},\"qty\":{},\"authed\":{},\"addr\":{},\"email\":{}}}",
+        decision, detail, settings, sub, c.lines, c.qty, c.is_authenticated,
         c.addresses.len(), c.email.as_deref().map(|e| !e.trim().is_empty()).unwrap_or(false)
     ))
 }
@@ -424,9 +561,10 @@ mod tests {
                 zip: Some(zip.into()),
                 country_code: Some("US".into()),
             }],
-            total: Some("10.94".into()),
+            subtotal: Some("0.99".into()),
             lines: 1,
             qty: 1,
+            token: None,
         }
     }
     fn bot() -> Checkout {
@@ -454,7 +592,7 @@ mod tests {
         let c = checkout(("James", "Anderson"), "500 Park Ave", "10022", "x@y.com");
         assert_eq!(
             decide(&c, &enforce()),
-            Decision::Block { rules: vec!["blocked_name"], message: block_message("(800) 548-6877") }
+            Decision::Block { rules: vec!["blocked_name"], enforced: vec!["blocked_name"], message: block_message("(800) 548-6877") }
         );
     }
 
@@ -626,7 +764,7 @@ mod tests {
             assert!(!line.to_lowercase().contains(pii), "{} in {}", pii, line);
         }
         assert!(line.contains("\"decision\":\"would_block\""));
-        assert!(line.contains("\"total\":\"10.94\"") && line.contains("\"n\":[1,4,1,0]"), "{}", line);
+        assert!(line.contains("\"sub\":\"0.99\"") && line.contains("\"n\":[1,4,1,0]"), "{}", line);
         // must be valid JSON for the log summary script
         serde_json::from_str::<Value>(&line).unwrap();
     }
@@ -686,5 +824,150 @@ mod tests {
             assert!(!s.blocked_address1.iter().any(|(a, _)| a == "428 w 45th st"));
             assert_eq!(s.blocked_address1.len(), 3);
         } else { panic!() }
+    }
+
+    // ---- Stage 2: token mode ----
+
+    fn with_token(mode: &str, soft: Option<&str>) -> Loaded {
+        let mut extra = format!("\"token_mode\": \"{}\", ", mode);
+        if let Some(v) = soft { extra.push_str(&format!("\"soft_tokens\": \"{}\", ", v)); }
+        loaded(&CONFIG.replace("\"mode\": \"enforce\"", &format!("{}\"mode\": \"log_only\"", extra)))
+    }
+    fn real(tok: TokenStatus) -> Checkout {
+        let mut c = checkout(("Jane", "Doe"), "12312 W Olympic Blvd", "90064", "jane.doe@gmail.com");
+        c.token = Some(Checked::only(tok));
+        c
+    }
+
+    #[test]
+    fn token_off_by_default_and_for_old_configs() {
+        let l = enforce();
+        assert_eq!(token_mode(&l), TokenMode::Off);
+        assert_eq!(decide(&real(TokenStatus::Missing), &l), Decision::Allow { reason: "clean" });
+        assert_eq!(token_mode(&load(true, Some("false"), Some(CONFIG))), TokenMode::Off);
+        assert_eq!(token_mode(&load(false, None, None)), TokenMode::Off);
+    }
+
+    #[test]
+    fn token_enforce_blocks_missing_invalid_expired() {
+        let l = with_token("enforce", None);
+        for (st, rule) in [(TokenStatus::Missing, "token_missing"), (TokenStatus::Malformed, "token_invalid"),
+                           (TokenStatus::BadSig, "token_invalid"), (TokenStatus::Expired, "token_expired")] {
+            assert_eq!(decide(&real(st), &l), Decision::Block { rules: vec![rule], enforced: vec![rule], message: block_message("(800) 548-6877") }, "{:?}", st);
+        }
+        assert_eq!(decide(&real(TokenStatus::Ok), &l), Decision::Allow { reason: "clean" });
+    }
+
+    #[test]
+    fn spec_12_soft_token_passes_unless_switched_off() {
+        assert_eq!(decide(&real(TokenStatus::Soft), &with_token("enforce", None)), Decision::Allow { reason: "clean" });
+        assert_eq!(decide(&real(TokenStatus::Soft), &with_token("enforce", Some("allow"))), Decision::Allow { reason: "clean" });
+        assert!(is_block(&decide(&real(TokenStatus::Soft), &with_token("enforce", Some("block")))));
+    }
+
+    #[test]
+    fn token_keys_problems_fail_open() {
+        let l = with_token("enforce", None);
+        for st in [TokenStatus::KeysMissing, TokenStatus::KeysStale] {
+            assert_eq!(decide(&real(st), &l), Decision::Allow { reason: "clean" }, "{:?}", st);
+        }
+    }
+
+    #[test]
+    fn token_log_only_never_blocks_even_with_blocklist_log_only() {
+        let l = with_token("log_only", None);
+        assert_eq!(decide(&real(TokenStatus::Missing), &l), Decision::WouldBlock { rules: vec!["token_missing"] });
+        let line = log_line(&decide(&real(TokenStatus::Missing), &l), &l, &real(TokenStatus::Missing)).unwrap();
+        assert!(line.contains("\"tmode\":\"log_only\"") && line.contains("\"tok\":\"missing\""), "{}", line);
+        serde_json::from_str::<Value>(&line).unwrap();
+    }
+
+    #[test]
+    fn modes_are_independent() {
+        // blocklist enforce + token log_only: token problem alone does not block
+        let l = loaded(&CONFIG.replace("\"mode\"", "\"token_mode\": \"log_only\", \"mode\""));
+        assert!(matches!(decide(&real(TokenStatus::Missing), &l), Decision::WouldBlock { .. }));
+        let mut b = bot();
+        b.token = Some(Checked::only(TokenStatus::Missing));
+        assert_eq!(rules_of(decide(&b, &l)), vec!["blocked_name", "blocked_address1", "blocked_zip", "token_missing"]);
+        assert!(is_block(&decide(&b, &l)));
+        // blocklist log_only + token enforce: blocklist hit alone does not block
+        let l = with_token("enforce", None);
+        let mut b = bot();
+        b.token = Some(Checked::only(TokenStatus::Ok));
+        assert!(matches!(decide(&b, &l), Decision::WouldBlock { .. }));
+    }
+
+    #[test]
+    fn token_exemptions_logged_in_and_b2b() {
+        let l = with_token("enforce", None);
+        let mut c = real(TokenStatus::Missing);
+        c.is_authenticated = true;
+        assert_eq!(decide(&c, &l), Decision::Exempt { reason: "exempt_logged_in", rules: vec!["token_missing"] });
+        let mut c = real(TokenStatus::Missing);
+        c.is_b2b = true;
+        assert!(matches!(decide(&c, &l), Decision::Exempt { reason: "exempt_b2b", .. }));
+    }
+
+    #[test]
+    fn token_setting_mistakes_never_block() {
+        let l = with_token("enforse", Some("maybe"));
+        assert_eq!(token_mode(&l), TokenMode::LogOnly);
+        if let Loaded::Enabled(s) = &l {
+            assert!(s.errors.contains(&"token_mode") && s.errors.contains(&"soft_tokens"), "{:?}", s.errors);
+            assert_eq!(s.soft_tokens, SoftPolicy::Allow);
+        } else { panic!() }
+        assert!(!is_block(&decide(&real(TokenStatus::Missing), &l)));
+        let l = with_token("off", None);
+        if let Loaded::Enabled(s) = &l { assert!(s.errors.is_empty(), "{:?}", s.errors); }
+    }
+
+    #[test]
+    fn soft_risky_only_fails_the_bot_cart_shape() {
+        let l = with_token("enforce", Some("risky"));
+        let mut c = real(TokenStatus::Soft); // guest, 1 line, qty 1, subtotal 0.99
+        assert_eq!(rules_of(decide(&c, &l)), vec!["token_soft_risky"]);
+        c.subtotal = Some("59.99".into()); // spec test 8 cart
+        assert_eq!(decide(&c, &l), Decision::Allow { reason: "clean" });
+        let mut c = real(TokenStatus::Soft);
+        c.qty = 2;
+        assert_eq!(decide(&c, &l), Decision::Allow { reason: "clean" });
+        let mut c = real(TokenStatus::Soft);
+        c.subtotal = None;
+        assert_eq!(decide(&c, &l), Decision::Allow { reason: "clean" }, "unknown subtotal never counts as risky");
+        let mut c = real(TokenStatus::Soft);
+        c.is_authenticated = true;
+        assert_eq!(decide(&c, &l), Decision::Allow { reason: "clean" });
+        // hard token with the same shape is fine
+        assert_eq!(decide(&real(TokenStatus::Ok), &l), Decision::Allow { reason: "clean" });
+    }
+
+    #[test]
+    fn logged_in_always_skip_token_even_when_blocklist_applies_to_them() {
+        let l = loaded(&CONFIG.replace("\"mode\"", "\"skip_logged_in\": false, \"token_mode\": \"enforce\", \"mode\""));
+        let mut c = real(TokenStatus::Missing);
+        c.is_authenticated = true;
+        assert_eq!(decide(&c, &l), Decision::Exempt { reason: "exempt_logged_in", rules: vec!["token_missing"] });
+        let mut b = bot();
+        b.is_authenticated = true;
+        b.token = Some(Checked::only(TokenStatus::Missing));
+        match decide(&b, &l) {
+            Decision::Block { enforced, rules, .. } => {
+                assert_eq!(enforced, vec!["blocked_name", "blocked_address1", "blocked_zip"]);
+                assert!(rules.contains(&"token_missing"));
+            }
+            d => panic!("{:?}", d),
+        }
+    }
+
+    #[test]
+    fn block_line_separates_enforced_rules() {
+        let l = loaded(&CONFIG.replace("\"mode\"", "\"token_mode\": \"log_only\", \"mode\""));
+        let mut b = bot();
+        b.token = Some(Checked { status: TokenStatus::BadSig, age: Some(1), tid: Some("995432.fe264695".into()) });
+        let line = log_line(&decide(&b, &l), &l, &b).unwrap();
+        assert!(line.contains("\"enf\":[\"blocked_name\",\"blocked_address1\",\"blocked_zip\"]"), "{}", line);
+        assert!(line.contains("\"tok\":\"bad_sig\",\"tid\":\"995432.fe264695\",\"tage\":1,"), "{}", line);
+        serde_json::from_str::<Value>(&line).unwrap();
     }
 }

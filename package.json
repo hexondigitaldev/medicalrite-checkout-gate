@@ -5,7 +5,7 @@
     "config:link": "shopify app config link",
     "dev": "shopify app dev",
     "deploy": "shopify app deploy",
-    "check": "cd extensions/probe-validation && cargo check && cd ../probe-payment && cargo check"
+    "test": "cd extensions/checkout-rule && cargo test && cd ../../server && npm test"
   },
   "devDependencies": {
     "@shopify/cli": "^4.8.1"

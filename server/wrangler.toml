@@ -1,0 +1,89 @@
+# Dev environment Worker (Medicalrite Bot Gate app, dev store only).
+# A production Worker gets its own [env.production] section later, with its own secrets.
+name = "sc-dev"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+SHOP = "medicalrite-dev.myshopify.com"
+SHOPIFY_CLIENT_ID = "95ea1c81ef6561574915f99863674d71"
+TURNSTILE_HOSTNAMES = "medicalrite-dev.myshopify.com"
+API_VERSION = "2026-07"
+# Which X-Forwarded-For entry is the buyer: confirm on the dev store (stage2 dev test T8).
+IP_HEADER_POS = "first"
+# Production only: a storefront URL the cron checks for the helper script (alerts if a theme publish drops it).
+# STOREFRONT_URL = "https://www.example.com/"
+
+# Secrets (never in this file):
+#   npx wrangler secret put SHOPIFY_CLIENT_SECRET   (Dev Dashboard -> app -> Settings -> Client secret)
+#   npx wrangler secret put TURNSTILE_SECRET        (Cloudflare -> Turnstile -> store-check -> Settings)
+#   npx wrangler secret put MASTER_KEY              (64 random hex chars, see README)
+
+[[kv_namespaces]]
+binding = "STATE"
+id = "e0e2c41673234b2ba46e12f2213a48de"
+
+[[ratelimits]]
+name = "LIMIT_IP"
+namespace_id = "1001"
+simple = { limit = 30, period = 60 }
+
+# Soft tokens (Turnstile failed or slow): per IP (refuses), and a store-wide budget (never refuses,
+# only logs soft_over_budget for review). Cloudflare-side failures never count.
+[[ratelimits]]
+name = "LIMIT_SOFT"
+namespace_id = "1002"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "LIMIT_SOFT_ALL"
+namespace_id = "1003"
+simple = { limit = 60, period = 60 }
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[observability]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# Production Worker (MR Checkout Tools app, live store). Deploy: npx wrangler deploy --env production
+# Secrets are separate per env: npx wrangler secret put <NAME> --env production
+# Bindings and vars are NOT inherited from the top level, so everything is repeated here.
+[env.production]
+name = "sc-prod"
+workers_dev = true
+
+[env.production.vars]
+SHOP = "medicalritestore.myshopify.com"
+SHOPIFY_CLIENT_ID = "2ddfa983c1b7e13fc7486d5c5a4ea6d9"
+TURNSTILE_HOSTNAMES = "medicalrite.com,www.medicalrite.com,medicalritestore.myshopify.com"
+API_VERSION = "2026-07"
+IP_HEADER_POS = "first" # dev test T8: Shopify sends one X-Forwarded-For entry
+STOREFRONT_URL = "https://medicalrite.com/"
+
+[[env.production.kv_namespaces]]
+binding = "STATE"
+id = "PROD_KV_ID" # npx wrangler kv namespace create STATE --env production
+
+[[env.production.ratelimits]]
+name = "LIMIT_IP"
+namespace_id = "2001"
+simple = { limit = 30, period = 60 }
+
+[[env.production.ratelimits]]
+name = "LIMIT_SOFT"
+namespace_id = "2002"
+simple = { limit = 10, period = 60 }
+
+[[env.production.ratelimits]]
+name = "LIMIT_SOFT_ALL"
+namespace_id = "2003"
+simple = { limit = 60, period = 60 }
+
+[env.production.triggers]
+crons = ["*/10 * * * *"]
+
+[env.production.observability]
+enabled = true

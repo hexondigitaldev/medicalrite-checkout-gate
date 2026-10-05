@@ -49,3 +49,29 @@ Note: an autofilled email is not a login — only a real sign-in sets `isAuthent
 - First check (560 most recent runs read through Dev Dashboard, read-only): 7 Pay-step runs, all `allow · clean`, `mode:log_only`, `n:[1,4,1,0]`, `cfg_errors:[]`. Log lines contain no PII.
 - Seen: one order produced 2 Pay-step runs 1 s apart (Shopify retry, normal); 2 Pay-step runs with `addr:0, email:false` (probably pickup or express) — watch in the review.
 - Run details (input) are visible in Dev Dashboard for the production app.
+
+## Found during Stage 2 (2026-09-30)
+
+- The ZIP-scoped address code (D12, critic round 4) was not in the repo, so **live runs without it**: `428 w 45th st|10036`, `230 w 55th st|10019`, `123 main st|10080` never match; `428 st` and ZIP 10080 still do. Log-only, so no customer impact, but the would-block counts under-report those two buildings. Fix is on `stage-2/token` and as a separate hotfix for live.
+- From the Stage 2 version the log line is `v:3` and uses `sub` (product subtotal) instead of `total`.
+
+## Live log-only review — 2026-10-01 (orders Sep 29 00:08 → Oct 1 10:02 ET)
+
+Method: Dev Dashboard can't filter runs (~40k runs in 2 days), so the live blocklist was replayed over the orders export with `scripts/review_live_orders.py` (same matching as rules.rs). Export kept in `data/` (not in git).
+
+- 329 orders (291 web, 38 subscription renewals).
+- **Would be blocked in enforce: 9** — MR54017, 54018, 54023, 54226, 54228, 54229, 54230, 54235, 54236.
+  - All 9: blocked name **and** address `428 w 45th st|10036`, 1 item, qty 1, subtotal $1.39/$1.99, Authorize.net, Shopify risk **High**, payment **pending**. All bot-shaped; no real customer among them.
+  - The ZIP-scoped entry did the work (all matched `428 w 45th st|10036`), so the D12 hotfix mattered.
+- **No false positives** found. (The export can't show logged-in status; logged-in buyers would be exempt anyway.)
+- Not caught, worth a manual look: **MR54231** ($0.99, High risk, pending, NYC ZIP) and **MR54222** ($5.99, High risk). MR54225 ($217, 19 items, High, refunded) looks like a different kind of fraud. Six other single cheap items were Low risk and paid — probably real customers.
+
+### Refresh — 2026-10-05 (orders Sep 29 → Oct 5 06:12 ET, `data/orders_export_1.csv`)
+- 769 orders (689 web, 80 subscription renewals). Would be blocked in enforce: still **9** (the same Sep 29 / Oct 1 bot orders; all now `expired`). **No new would-blocks and no false positives** in 440 orders since Oct 1.
+- Since Oct 1: 439 Low risk, 1 High (MR54414, $240.89, 11 items, pending — not card-testing shaped). No bot wave seen.
+
+## 2026-10-05 — enforce on live
+Approved by Timur. Entry `main` → `"mode":"enforce"`. Live check passed: blocked at Pay with the support phone message (screenshot in chat, no order created). Rollback: set `mode` back to `log_only` (or Enabled = False).
+
+## 2026-10-05 incident — unreviewed Stage 2 build released to live (~10 min)
+A bare `npx shopify app deploy` (meant for dev) used the remembered production config and released mr-checkout-tools-4 (Stage 2 branch) to live at 22:14 PKT. That build reads settings handle `settings`, which live doesn't have yet → rule failed open (blocklist off). Theme embed was off, so no storefront effect. Rolled back by releasing mr-checkout-tools-3 in Dev Dashboard → Versions shortly after. Prevention: explicit `--config` on every deploy (CLAUDE.md).

@@ -1,0 +1,17 @@
+{%- comment -%}
+  App embed: keeps a short-lived cart token (cart attribute) for the checkout rule.
+  Nothing visible. Settings: the public site key only (never a secret).
+{%- endcomment -%}
+{%- if block.settings.site_key != blank -%}
+  <script src="{{ 'sf.js' | asset_url }}" defer data-k="{{ block.settings.site_key | escape }}"></script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Storefront helper",
+  "target": "body",
+  "settings": [
+    { "type": "text", "id": "site_key", "label": "Site key" }
+  ]
+}
+{% endschema %}
