@@ -84,3 +84,9 @@ Dev store (full flow + all checkout paths) → critic rounds → live with `toke
 - `MASTER_KEY` is only rotated while `token_mode` is off or log_only (all tokens become invalid for up to an hour).
 
 Note for log review: from this version the log field `total` is replaced by `sub` (product subtotal, without shipping). The bot orders so far had subtotal $0.99–$1.96 (total $10.94–$11.91 with $9.95 shipping).
+
+## Production values (public, 2026-10-06)
+- Cloudflare account: MedicalRite (Timur), Workers Paid, account id `f11d7688e5bfb84642ed9f8785c8bf86`, subdomain `medicalrite.workers.dev`.
+- Worker `sc-prod` → https://sc-prod.medicalrite.workers.dev
+- Turnstile widget `medicalrite-live` (Invisible, no pre-clearance), hostnames medicalrite.com, www.medicalrite.com, medicalritestore.myshopify.com. **Site key `0x4AAAAAAFPOhcduLTake4BT`** → goes into the live theme embed setting. Secret only in `wrangler secret put TURNSTILE_SECRET --env production`.
+- Go-live gate: privacy policy must mention Turnstile + link the Cloudflare Turnstile Privacy Addendum (Cloudflare condition for Invisible mode) before the live embed is turned on. Text sent to Timur for approval.
