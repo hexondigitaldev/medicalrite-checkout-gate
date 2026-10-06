@@ -53,6 +53,8 @@ enabled = true
 # Bindings and vars are NOT inherited from the top level, so everything is repeated here.
 [env.production]
 name = "sc-prod"
+# MedicalRite Cloudflare account (Timur, Workers Paid). Worker URL: https://sc-prod.medicalrite.workers.dev
+account_id = "f11d7688e5bfb84642ed9f8785c8bf86"
 workers_dev = true
 
 [env.production.vars]
@@ -65,7 +67,7 @@ STOREFRONT_URL = "https://medicalrite.com/"
 
 [[env.production.kv_namespaces]]
 binding = "STATE"
-id = "PROD_KV_ID" # npx wrangler kv namespace create STATE --env production
+id = "3124f65847104b7bad3a0b1e52fcf14e" # production-STATE on the MedicalRite account
 
 [[env.production.ratelimits]]
 name = "LIMIT_IP"

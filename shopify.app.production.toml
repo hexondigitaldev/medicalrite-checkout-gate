@@ -3,7 +3,7 @@
 client_id = "2ddfa983c1b7e13fc7486d5c5a4ea6d9"
 name = "MR Checkout Tools"
 # Stage 2: app home + app proxy are served by the production token server (Cloudflare Worker "sc-prod").
-application_url = "https://sc-prod.hexondigitaldev.workers.dev"
+application_url = "https://sc-prod.medicalrite.workers.dev"
 embedded = true
 
 [access_scopes]
@@ -13,11 +13,11 @@ embedded = true
 scopes = "read_customers,read_validations,write_validations"
 
 [auth]
-redirect_urls = [ "https://sc-prod.hexondigitaldev.workers.dev/" ]
+redirect_urls = [ "https://sc-prod.medicalrite.workers.dev/" ]
 
-# Token endpoint on the storefront: /apps/sc/t  ->  https://sc-prod.hexondigitaldev.workers.dev/proxy/t
+# Token endpoint on the storefront: /apps/sc/t  ->  https://sc-prod.medicalrite.workers.dev/proxy/t
 [app_proxy]
-url = "https://sc-prod.hexondigitaldev.workers.dev/proxy"
+url = "https://sc-prod.medicalrite.workers.dev/proxy"
 subpath = "sc"
 prefix = "apps"
 
