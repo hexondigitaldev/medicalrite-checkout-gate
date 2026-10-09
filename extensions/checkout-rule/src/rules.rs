@@ -86,6 +86,9 @@ pub struct Checkout {
     pub email: Option<String>,
     pub is_authenticated: bool,
     pub is_b2b: bool,
+    /// A customer account is attached (logged in, draft invoice, or a guest who typed a known email).
+    /// Logged only: NOT an exemption, a guest typing any existing customer's email gets one (dev test, 10-08).
+    pub has_customer: bool,
     pub addresses: Vec<Address>,
     /// Product subtotal (for the soft-token cart shape and for matching logs to orders).
     pub subtotal: Option<String>,
@@ -518,8 +521,8 @@ pub fn log_line(d: &Decision, loaded: &Loaded, c: &Checkout) -> Option<String> {
     };
     let sub: String = c.subtotal.as_deref().unwrap_or("").chars().filter(|ch| ch.is_ascii_digit() || *ch == '.').collect();
     Some(format!(
-        "{{\"v\":3,\"decision\":\"{}\",{},{},\"sub\":\"{}\",\"lines\":{},\"qty\":{},\"authed\":{},\"addr\":{},\"email\":{}}}",
-        decision, detail, settings, sub, c.lines, c.qty, c.is_authenticated,
+        "{{\"v\":3,\"decision\":\"{}\",{},{},\"sub\":\"{}\",\"lines\":{},\"qty\":{},\"authed\":{},\"cust\":{},\"addr\":{},\"email\":{}}}",
+        decision, detail, settings, sub, c.lines, c.qty, c.is_authenticated, c.has_customer,
         c.addresses.len(), c.email.as_deref().map(|e| !e.trim().is_empty()).unwrap_or(false)
     ))
 }
@@ -553,6 +556,7 @@ mod tests {
             email: Some(email.into()),
             is_authenticated: false,
             is_b2b: false,
+            has_customer: false,
             addresses: vec![Address {
                 first_name: Some(name.0.into()),
                 last_name: Some(name.1.into()),
@@ -837,6 +841,18 @@ mod tests {
         let mut c = checkout(("Jane", "Doe"), "12312 W Olympic Blvd", "90064", "jane.doe@gmail.com");
         c.token = Some(Checked::only(tok));
         c
+    }
+
+    #[test]
+    fn customer_attached_guest_is_not_exempt() {
+        // A guest who types an existing customer's email gets that customer attached (dev test 2026-10-08),
+        // so an attached customer must never skip the token check.
+        let l = with_token("enforce", None);
+        let mut c = real(TokenStatus::Missing);
+        c.has_customer = true;
+        assert!(is_block(&decide(&c, &l)));
+        let line = log_line(&decide(&c, &l), &l, &c).unwrap();
+        assert!(line.contains("\"cust\":true"), "{}", line);
     }
 
     #[test]

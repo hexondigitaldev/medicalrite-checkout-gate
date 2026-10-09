@@ -9,7 +9,7 @@ embedded = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_payment_customizations,write_payment_customizations,read_validations,write_validations"
+scopes = "read_customers,read_products,read_payment_customizations,write_payment_customizations,read_validations,write_validations"
 
 [build]
 # false: `shopify app dev` must not replace the Worker URLs with a tunnel.

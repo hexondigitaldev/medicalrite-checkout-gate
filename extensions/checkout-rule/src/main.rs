@@ -46,6 +46,7 @@ fn cart_validations_generate_run(
         email: buyer.and_then(|b| b.email()).cloned(),
         is_authenticated: buyer.map(|b| *b.is_authenticated()).unwrap_or(false),
         is_b2b: buyer.map(|b| b.purchasing_company().is_some()).unwrap_or(false),
+        has_customer: buyer.map(|b| b.customer().is_some()).unwrap_or(false),
         addresses: cart
             .delivery_groups()
             .iter()
@@ -127,7 +128,7 @@ mod glue_tests {
   "cart": {{
     "cost": {{ "subtotalAmount": {{ "amount": "1.96" }} }},
     "lines": [ {{ "quantity": 1 }} ],
-    "buyerIdentity": {{ "email": "someone@gmail.com", "isAuthenticated": {authed}, "purchasingCompany": {company} }},
+    "buyerIdentity": {{ "email": "someone@gmail.com", "isAuthenticated": {authed}, "customer": null, "purchasingCompany": {company} }},
     "deliveryGroups": [
       {{ "deliveryAddress": {{ "firstName": "Mary", "lastName": "Smith", "name": "Mary Smith", "address1": "{address1}", "zip": "10019", "countryCode": "US" }} }},
       {{ "deliveryAddress": null }}
@@ -205,6 +206,9 @@ mod glue_tests {
         token_input_f(token, authed, keys, cfg_token_mode, false)
     }
     fn token_input_f(token: &str, authed: bool, keys: &str, cfg_token_mode: &str, past_fresh: bool) -> String {
+        token_input_g(token, authed, "null", keys, cfg_token_mode, past_fresh)
+    }
+    fn token_input_g(token: &str, authed: bool, customer: &str, keys: &str, cfg_token_mode: &str, past_fresh: bool) -> String {
         let cfg = format!(r#"{{\"mode\":\"log_only\",\"token_mode\":\"{cfg_token_mode}\",\"support_phone\":\"(800) 548-6877\"}}"#);
         format!(
             r#"{{
@@ -217,7 +221,7 @@ mod glue_tests {
       {{ "quantity": 1, "merchandise": {{ "__typename": "ProductVariant", "id": "gid://shopify/ProductVariant/49876543210" }} }},
       {{ "quantity": 1, "merchandise": {{ "__typename": "ProductVariant", "id": "gid://shopify/ProductVariant/41234567890" }} }}
     ],
-    "buyerIdentity": {{ "email": "someone@gmail.com", "isAuthenticated": {authed}, "purchasingCompany": null }},
+    "buyerIdentity": {{ "email": "someone@gmail.com", "isAuthenticated": {authed}, "customer": {customer}, "purchasingCompany": null }},
     "deliveryGroups": [ {{ "deliveryAddress": {{ "firstName": "Mary", "lastName": "Smith", "name": "Mary Smith", "address1": "1 Real Rd", "zip": "90210", "countryCode": "US" }} }} ]
   }},
   "validation": {{ "keys": {keys} }},
@@ -256,6 +260,13 @@ mod glue_tests {
     fn token_for_other_cart_blocks() {
         let copied = attr("1.995432.h.00000000000000000000000000000000");
         assert_eq!(errors(&token_input(&copied, false, &keys_json(), "enforce")).len(), 1);
+    }
+
+    #[test]
+    fn customer_attached_guest_still_needs_a_token() {
+        let cust = r#"{ "id": "gid://shopify/Customer/123" }"#;
+        assert_eq!(errors(&token_input_g("null", false, cust, &keys_json(), "enforce", false)).len(), 1);
+        assert!(errors(&token_input_g("null", true, cust, &keys_json(), "enforce", false)).is_empty(), "logged in: exempt");
     }
 
     #[test]

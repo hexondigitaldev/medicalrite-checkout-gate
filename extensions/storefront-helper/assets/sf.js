@@ -68,8 +68,17 @@
     return tsLoad;
   }
   function finish(v) { if (tsDone) { var d = tsDone; tsDone = null; d(v); } }
-  function tsResponse() {
-    return withTimeout(loadTs().then(function () {
+  // One Turnstile run at a time. A Turnstile answer is single-use and valid ~300 s; we use it within 240 s.
+  var LATE_MAX_MS = 240 * 1000;
+  var tsRun = null, late = null;
+  function lateToken() {
+    if (late && now() - late.at < LATE_MAX_MS) { var t = late.t; late = null; return t; }
+    late = null;
+    return null;
+  }
+  function tsExec() {
+    if (tsRun) return tsRun;
+    tsRun = loadTs().then(function () {
       return new Promise(function (resolve) {
         tsDone = resolve;
         if (widget === null) {
@@ -86,7 +95,39 @@
         }
         window.turnstile.execute(widget);
       });
-    }), TS_WAIT_MS).catch(function () { finish(null); return null; });
+    }).catch(function () { finish(null); return null; }).then(function (v) { tsRun = null; return v; });
+    return tsRun;
+  }
+  // Answer within TS_WAIT_MS, else a soft ticket for now. If Turnstile answers later (slow page), keep that
+  // answer and swap the soft ticket for a hard one in the background: the buyer never waits for it.
+  function tsResponse() {
+    var t = lateToken();
+    if (t) return Promise.resolve(t);
+    var p = tsExec();
+    return withTimeout(p, TS_WAIT_MS).then(function (v) {
+      if (late && late.t === v) late = null; // the warm-up stored this same answer: it is used now
+      return v;
+    }, function () {
+      p.then(function (v) { if (v) { late = { t: v, at: now() }; upgrade(); } });
+      return null;
+    });
+  }
+  function upgrade() {
+    var s = saved();
+    if (s && s.f === "h" && s.exp - now() >= MIN_LEFT_MS) return; // already hard; keep `late` for the next refresh
+    if (running) dirty = true; // picked up when the current run ends
+    else ensure(false);
+  }
+  // Warm up on page load: fetch Turnstile and get one answer ready for the first Add to cart.
+  function prefetch() {
+    var s = saved();
+    if (s && s.f === "h" && s.exp - now() >= MIN_LEFT_MS) return;
+    tsExec().then(function (v) {
+      if (!v || late) return;
+      late = { t: v, at: now() };
+      var cur = saved();
+      if (cur && cur.f !== "h") upgrade(); // cart already holds a soft ticket: swap it now
+    });
   }
 
   function fresh(s, c, cur) {
@@ -114,7 +155,7 @@
       var c = cartContent(cart.items);
       if (!c) return;
       var cur = cart.attributes && cart.attributes[ATTR];
-      if (!force && fresh(saved(), c, cur)) return;
+      if (!force && !(late && saved() && saved().f !== "h") && fresh(saved(), c, cur)) return;
       var resp = await post(EP, { c: c, r: await tsResponse() }, EP_WAIT_MS);
       if (!resp.ok) throw new Error("e");
       var data = await resp.json();
@@ -227,5 +268,6 @@
   document.addEventListener("visibilitychange", maybeRefresh);
   setInterval(maybeRefresh, 60 * 1000);
 
+  prefetch();
   ensure(false);
 })();
