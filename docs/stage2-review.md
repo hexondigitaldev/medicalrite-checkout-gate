@@ -55,3 +55,9 @@ Also found: the D12 ZIP-scoped address change was never saved to the repo (see `
 - **T9 re-run passed (2026-10-05):** after the fix (dev version medicalrite-bot-gate-6, Worker redeployed, app opened), the same Liquid block prints `KEYS:[] []`.
 - **T3 re-run passed (22:42 PKT):** with keys on the checkout rule: input has `validation.keys`, log `tok:"ok"`, `tid:"995123.bc90499e"`, `decision:allow`. Rust tests 62 pass.
   - Gotcha: first try (22:31) still ran the Oct 1 `app dev` preview (old query, `shop.keys` → `keys_missing`) although medicalrite-bot-gate-6 was released. Fixed by running `shopify app dev --config shopify.app.toml` once (preview refreshed to current code) and quitting. A dev preview always wins over released versions on the dev store.
+
+## Live round 2 — 2026-10-09
+- mr-checkout-tools-7 live 15:10 PKT (Turnstile warm-up + late hard ticket, `cust` log field, `read_products` in config).
+- Blocked-address check on live after the deploy: **blocked** ✔.
+- `read_products` not granted on live: no update prompt, and the custom-distribution install link returns `invalid_link` (already installed). Checkout unaffected; live run logs stay hidden. Reviews use the orders export (`_bg` note attribute) + Worker logs. Open item: add a scope-request button (App Bridge) to the app page later.
+- Next review ~Oct 11: orders from Oct 9 15:10 PKT, compare soft share with 38% (review #1).
