@@ -55,3 +55,35 @@ Also found: the D12 ZIP-scoped address change was never saved to the repo (see `
 - **T9 re-run passed (2026-10-05):** after the fix (dev version medicalrite-bot-gate-6, Worker redeployed, app opened), the same Liquid block prints `KEYS:[] []`.
 - **T3 re-run passed (22:42 PKT):** with keys on the checkout rule: input has `validation.keys`, log `tok:"ok"`, `tid:"995123.bc90499e"`, `decision:allow`. Rust tests 62 pass.
   - Gotcha: first try (22:31) still ran the Oct 1 `app dev` preview (old query, `shop.keys` → `keys_missing`) although medicalrite-bot-gate-6 was released. Fixed by running `shopify app dev --config shopify.app.toml` once (preview refreshed to current code) and quitting. A dev preview always wins over released versions on the dev store.
+
+## Live rollout (log-only) — 2026-10-06
+- Worker `sc-prod` on the MedicalRite Cloudflare account (Workers Paid), KV `production-STATE`, 3 secrets set; `/health` reachable.
+- Live entry `settings` created 10-05 (copy of `main`, enforce); `"token_mode":"log_only"` added 10-06.
+- mr-checkout-tools-5 released, but built from `main` before the prod-config PR was merged → app URL pointed at `sc-prod.hexondigitaldev.workers.dev` (404). Merged PR, redeployed from `main` (mr-checkout-tools-6).
+- App page then showed "Open this app from the Shopify admin" (`home_denied`, `verified_shop:null`): the live app had an unfinished secret rotation (Old + New). Set Worker to the New secret, revoked Old → app **connected, keys published 15:44 UTC**, status `embed_missing` (expected, embed off).
+- Lesson: before a live deploy run `findstr workers.dev shopify.app.production.toml` on `main`.
+- Blocked-address check on live after the switch to `settings`: **blocked** (support phone message). 
+- Next: privacy-policy line (Turnstile) + Brandon heads-up → turn on embed with site key `0x4AAAAAAFPOhcduLTake4BT`; then a few days of log-only review.
+- **Embed on (2026-10-06 ~18:00 UTC)** in live theme `medicalrite/main` (GitHub-connected → settings_data.json; Brandon told), site key `0x4AAAAAAFPOhcduLTake4BT`. Privacy policy got the approved Turnstile "Fraud Prevention" section first (Timur approved text).
+- Live smoke test: `window.__sfh` true; Add to cart → cart attribute `_bg` = `1.995172.s.…`; Worker log `{"f":"s","why":"no_response","xff":1}`; `/health` → `{"ok":true}`.
+- Watch item: first ticket on live was **soft** (Turnstile didn't answer within 4 s on a heavy live page). Same as dev first loads. In log-only, measure the soft share (Worker `why`) and the rule's `tok` mix on real orders; if soft is common, raise `TS_WAIT_MS` / load Turnstile earlier before enforcing.
+
+## Live log-only review #1 — 2026-10-08 (orders Oct 5–8, 471 orders)
+- Blocklist (Stage 1, enforce): 1 would-block in the export, MR54696 (Oct 5 07:19, before enforce; $1.99, High risk, refunded). 0 real customers matched. No bot-shaped orders in the Oct 5 13:14 EDT incident window.
+- MR54895 (Oct 6 14:09, $1.99, High, pending) carries ticket tid 995172.db6aa3e8 = the live smoke-test cart → Hexon's own test order; to be voided/cancelled.
+- Tickets on real web orders since the embed went on (Oct 6 14:00 EDT → Oct 8): **250 web orders: hard 152 (61%), soft 94 (38%), none 4 (2%)**; 16 subscription renewals (no checkout, rule n/a).
+  - By day: Oct 6 40h/35s/2none, Oct 7 91h/49s/2none, Oct 8 21h/10s/0none.
+  - **Soft share 38% is too high** to rely on: soft = Turnstile didn't answer in 4 s (`no_response`). Fix before enforce (see below).
+  - 4 web orders without a ticket (MR54892 14:02 right after embed on — cart older than embed; MR54932, MR55020, MR55057): low risk, paid, real. Cause unknown (logged in? checkout link?). Need the rule log (`authed`) to tell.
+- **Live run logs are hidden**: Dev Dashboard says "Full log details are hidden because your app is missing … read_products" (Stage 2 query reads the variant id). Add `read_products` to production scopes to see live decisions.
+- Planned fixes: (1) `read_products` scope (prod + dev); (2) sf.js: load Turnstile on page load, and when the 4 s wait times out keep listening — if Turnstile answers later, fetch a hard ticket in the background (no visible delay). Then re-measure soft share.
+
+## Round 2 dev tests — 2026-10-08 (medicalrite-bot-gate-7)
+- 23:23:42 draft invoice (customer attached, box not ticked): `authed:true` → `exempt_logged_in`, `tok:"missing"`. (Browser may have had a customer login; re-check in a fresh incognito.)
+- 23:24:55 **guest, cart link, existing customer's email: `cust:true`, `authed:false` → `exempt_customer`, `tok:"missing"` → exemption unsafe, removed.**
+- 23:26:31 normal Add to cart → `tok:"ok"`, `cust:true` (same typed email).
+- 23:27:55 warm-up (10 s on homepage, then Add to cart) → `tok:"ok"`.
+- Live log visibility on dev unchanged; `read_products` still to be approved on live after the prod deploy.
+- Retest after removing the exemption (medicalrite-bot-gate-8):
+  - 23:35:17 guest, cart link, existing customer's email → `would_block`, `token_missing`, `authed:false`, `cust:true` ✔ (would be blocked in enforce).
+  - 23:36:54 draft invoice ($699.95) opened in a fresh incognito → `isAuthenticated:true` → `exempt_logged_in` ✔. Invoice links sign the buyer in as the attached customer, so invoices **with a customer** never need the ticket; "Ignore all checkout rules" is only needed for invoices **without** a customer.

@@ -9,8 +9,8 @@ embedded = true
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # read_customers: lets the Dev Dashboard show run details (our log line) for checkout-rule, whose
-# input reads email/addresses. Payment scopes are added in Stage 3.
-scopes = "read_customers,read_validations,write_validations"
+# input reads email/addresses; read_products: same for the variant ids (Stage 2). Payment scopes are added in Stage 3.
+scopes = "read_customers,read_products,read_validations,write_validations"
 
 [auth]
 redirect_urls = [ "https://sc-prod.medicalrite.workers.dev/" ]

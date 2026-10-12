@@ -9,7 +9,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const windows = [];
 after(() => windows.forEach((w) => w.close()));
 
-function browser({ items = [{ variant_id: 11, quantity: 1 }], attr = null, cartOk = true, epDelay = 0, stored = null, epStatus = 200, formExtra = "" } = {}) {
+function browser({ items = [{ variant_id: 11, quantity: 1 }], attr = null, cartOk = true, epDelay = 0, stored = null, epStatus = 200, formExtra = "", tsDelay = 10, tsFail = false } = {}) {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>
     <form id="cart" action="/cart" method="post">${formExtra}<button id="co" type="submit" name="checkout">Checkout</button></form><div class="additional-checkout-buttons" id="ex"></div>
   </body></html>`, { url: "https://shop.example/cart", runScripts: "dangerously", virtualConsole: new VirtualConsole() });
@@ -35,6 +35,7 @@ function browser({ items = [{ variant_id: 11, quantity: 1 }], attr = null, cartO
     }
     if (u.endsWith("cart/update.js")) { state.attr = JSON.parse(init.body).attributes._bg; return res({}); }
     if (u.includes("/cart/change")) { state.items = JSON.parse(init.body).items; return res({}); }
+    if (u.includes("/cart/add")) { state.items = [{ variant_id: 11, quantity: 1 }]; return res({}); }
     return res({}, false);
   };
   // Turnstile stub: answers after 10 ms.
@@ -42,7 +43,8 @@ function browser({ items = [{ variant_id: 11, quantity: 1 }], attr = null, cartO
     for (const s of w.document.querySelectorAll("script[src*='challenges']")) {
       if (s.dataset.done) continue;
       s.dataset.done = 1;
-      w.turnstile = { render: (_el, o) => ((w.__o = o), 1), reset() {}, execute: () => setTimeout(() => w.__o.callback("ts-ok"), 10) };
+      state.execs = 0;
+      w.turnstile = { render: (_el, o) => ((w.__o = o), 1), reset() {}, execute: () => { state.execs++; setTimeout(() => (tsFail ? w.__o["error-callback"]() : w.__o.callback("ts-ok")), tsDelay); } };
       setTimeout(() => w.__sfhTs(), 1);
     }
   }).observe(w.document.head, { childList: true });
@@ -100,8 +102,8 @@ test("cart.js failing: bounded retries, never a busy loop", async () => {
   assert.ok(n >= 2 && n <= 4, `cart.js called ${n} times`);
 });
 
-test("soft token is reused for 5 minutes instead of retrying on every page", async () => {
-  const { state } = browser({ attr: "S", stored: { t: "S", c: "11:1", f: "s", at: Date.now() - 60000, exp: Date.now() + 50 * 60000 } });
+test("soft token is reused for 5 minutes instead of retrying on every page (Turnstile failing)", async () => {
+  const { state } = browser({ tsFail: true, attr: "S", stored: { t: "S", c: "11:1", f: "s", at: Date.now() - 60000, exp: Date.now() + 50 * 60000 } });
   await sleep(150);
   assert.equal(count(state, "/apps/sc/t"), 0);
 });
@@ -169,4 +171,40 @@ test("theme 'disable on submit' handler + pending refresh: resumed submit still 
   await sleep(600);
   assert.equal(runs, 1, "theme handler ran exactly once");
   assert.equal(lastSubmitterDisabled, false, "submitter was still enabled when the real submit happened");
+});
+
+const tsCalls = (state) => state.calls.filter((c) => c.u === "/apps/sc/t");
+
+test("soft ticket on the cart is swapped for a hard one when Turnstile answers on the next page", async () => {
+  const { state } = browser({ attr: "S", stored: { t: "S", c: "11:1", f: "s", at: Date.now() - 60000, exp: Date.now() + 50 * 60000 } });
+  await sleep(300);
+  const t = tsCalls(state);
+  assert.equal(t.length, 1);
+  assert.equal(t[0].body.r, "ts-ok", "hard: carries the Turnstile answer");
+  assert.equal(state.attr, "tok-for-11:1");
+});
+
+test("slow Turnstile: soft ticket first, then upgraded to hard in the background (no second Turnstile run)", async () => {
+  const { state } = browser({ tsDelay: 4500 });
+  await sleep(4300);
+  let t = tsCalls(state);
+  assert.equal(t.length, 1, "soft ticket after the 4 s wait");
+  assert.equal(t[0].body.r, null);
+  await sleep(900);
+  t = tsCalls(state);
+  assert.equal(t.length, 2, "upgrade request once the late answer arrives");
+  assert.equal(t[1].body.r, "ts-ok");
+  assert.equal(state.execs, 1, "the late answer is reused, Turnstile is not run again");
+});
+
+test("empty cart: Turnstile is warmed up on load and the first Add to cart uses that answer", async () => {
+  const { w, state } = browser({ items: [] });
+  await sleep(100);
+  assert.equal(tsCalls(state).length, 0, "nothing requested for an empty cart");
+  await w.fetch("/cart/add.js", { method: "POST", body: JSON.stringify({ id: 11, quantity: 1 }) });
+  await sleep(500);
+  const t = tsCalls(state);
+  assert.equal(t.length, 1);
+  assert.equal(t[0].body.r, "ts-ok");
+  assert.equal(state.execs, 1, "one Turnstile run, answer used once");
 });

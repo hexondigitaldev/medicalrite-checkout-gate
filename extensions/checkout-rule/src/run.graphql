@@ -1,7 +1,7 @@
 # Input query cost budget: max 30 (Shopify, docs: leaf 1, metafield 3, metaobject 1,
 # metaobject field(key:) 3, containers/__typename/metafield value 0).
 # Stage 1 = 21. Stage 2 adds token value 1 + variant id 1 + keys metafield 3 + date 1
-# + pastFresh 1 = 28 / 30 (subtotal replaced total, same cost).
+# + pastFresh 1 = 28; + buyerIdentity.customer.id 1 (draft-invoice exemption) = 29 / 30 (subtotal replaced total, same cost).
 #
 # $freshUntil comes from the function's input-variables metafield ($app:sc.vars on the checkout
 # rule), rewritten by the token server on every key publish. The default makes a missing
@@ -31,6 +31,9 @@ query Input($freshUntil: DateTimeWithoutTimezone = "2000-01-01T00:00:00") {
     buyerIdentity {
       email
       isAuthenticated
+      customer {
+        id
+      }
       purchasingCompany {
         company {
           id
